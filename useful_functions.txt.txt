@@ -1,0 +1,128 @@
+--Smooths a value. a is the smooth variable, b is the variable to be smoothed, x is the rate
+function lerp( a, b, x )
+    return a * ( 1 - x ) + b * x
+end
+
+--Returns the sign of a value
+function sign(value)
+    if value > 0 then return 1 else return -1 end
+end
+
+--Maps a range of numbers to another range of numbers
+--E.G. map the range of a joystick (-32768 - 32768) to 0-100
+--Arguments: number to be mapped, start of input range, end of input range, start of output range, end of output range
+--Using above example: map(joystickValue,-32768,32768,0,100)
+function map(x,a,b,c,d)
+    return (x-a)/(b-a) * (d-c) + c
+end
+
+--Remove duplicates from an array using hash magic
+--Returns an array containing only unique values
+function removeDuplicates(input)
+    local hash = {}
+    local res = {}
+    for _,v in ipairs(input) do
+       if (not hash[v]) then
+           res[#res+1] = v
+           hash[v] = true
+       end
+    end
+    return res
+end
+
+--Returns the number of times a word occurs in a string
+--Can be made case-sensitive by removing :lower()
+function countInString(input, word)
+    local _, y = string.gsub(input:lower(), word:lower(), word:lower())
+    return y
+end
+
+--Automatically adds newline character (\n) to a string of text
+--Width can be set to any number of characters
+--Breaks if you have a word longer than the maximum width because i'm too lazy to fix that
+--Returns a string, with newlines added as necessary
+function wrapText(string, width)
+    local pos = width
+    local string = string.gsub(string, "\n", "")
+
+    if string.len(string) < width then
+        return string
+    else
+        local char = string.sub(string, pos, pos)
+        while char != " " do
+            pos = pos - 1
+            char = string.sub(string, pos, pos)
+        end
+        return string.sub(string, 1, pos) .. "\n" .. wrapText( string.sub( string, pos + 1, string.len(string) ), width)
+    end
+end
+
+--Searches for a player based on a partial or full name
+--Returns either the found player's entity, or nil if no player was found
+function findPlayerByName(name)
+    if not isValid(name) then return nil end
+    for _,v in pairs(find.allPlayers()) do
+        if string.match(string.lower(v:getName()), string.lower(name)) then
+            return v
+        end
+    end
+    return nil
+end
+
+--Old applyTorque function
+function applyTorqueOld(e,torque)
+    e:applyTorque(e:localToWorldVector(torque/27.052686728105131576810642206263))
+end
+
+--Gets a bearing
+function bearing(e,pos)
+    local rad2deg = 180/math.pi
+    pos = e:worldToLocal(Vector(pos[1],pos[2],pos[3]))
+    return rad2deg*-atan2(pos.y, pos.x)
+end
+
+--Converts a number, in seconds, to a nicely formatted string (HH:MM:SS)
+function secondsToClock(seconds)
+    local seconds = tonumber(seconds)
+    
+    if seconds <= 0 then
+        return "00:00:00"
+    else
+        hours = string.format("%02.f", math.floor(seconds/3600))
+        mins = string.format("%02.f", math.floor(seconds/60 - (hours*60)))
+        secs = string.format("%02.f", math.floor(seconds - hours*3600 - mins *60))
+        milisecs = string.format("%02.f", math.round((seconds%1)*100))
+        return hours..":"..mins..":"..secs.."."..milisecs
+    end
+end
+
+--Draws a pixel at the specified location with the specified color, only useful in rendertargets
+function draw(x, y, col, res)
+    render.setRGBA(col.x, col.y, col.z, 255)
+    render.drawRect(x * (1024/res), y * (1024/res), 1 + (1024/res), 1 + (1024/res))
+end
+
+--Returns 1 if the starfall is below the specified quota (0-1), otherwise returns 0
+function canRun(quota)
+    if quotaAverage() > quotaMax() * quota or quotaUsed() > quotaMax() * quota then return 0 end
+    return 1
+end
+
+--Converts spherical coordinates to cartesian coordinates
+function sphericalToCartesian(meridian,parallel)
+    local x = math.sin(meridian)*math.cos(parallel)
+    local y = math.sin(meridian)*math.sin(parallel)
+    local z = math.cos(meridian)
+    return Vector(x,y,z)
+end
+
+--Given a table of entities and a position, returns the closest entity to the position
+function closest(t, p) 
+    local c, e = math.huge for k, v in ipairs(t) do 
+        local d = v:getPos():getDistanceSqr(p) 
+        if d<c then 
+            c=d e=v 
+        end 
+    end 
+    return e 
+end
