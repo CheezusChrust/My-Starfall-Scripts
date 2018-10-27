@@ -1,0 +1,81 @@
+--@name Audio Visualizer
+--@author Cheezus
+--@shared
+
+if SERVER then
+    if not chip():isWeldedTo() then return end
+    chip():isWeldedTo():linkComponent(chip())
+else
+    local circleSize = 128 --Actual size of the circle on the screen
+    local circleRes = 512 --Resolution of the FFT magic (max 512)
+    local mul = 4 --Higher mul means circle pops more
+    local segmentSize = 16 --Making this >1 makes a cool block effect
+    local spin = true --Should the visualizer spin?
+    local spinSpeed = 0.5 --Take a guess what this does
+    local song = "" --URL of a song here (dropbox link or something that ends in .mp3)
+    
+    --Leave stuff under here alone unless you know what you're doing
+    
+    local tbl, smooth = {}, {}
+    
+    for i = 1, circleRes do
+        smooth[i] = 0
+    end
+    
+    --List of players who will hear the sound with noblock (all across the map)
+    local players = {
+        "[MG] Cheezus"
+    }
+    
+    local soundType = "3d noblock"
+    
+    local function lerp( a, b, x ) return a * ( 1 - x ) + b * x end
+    
+    local h,h2 = 0,0
+    
+    for _,v in pairs(players) do
+        if player():getName() == v then soundType = "noblock" end
+    end
+    
+    bass.loadURL(song, soundType, function(sound) 
+        hook.add("think","snd",function()
+            sound:setPos(chip():getPos())
+            tbl = sound:getFFT()
+            for i = 1, circleRes do
+                --smooth[i] = lerp(smooth[i], tbl[i*(512/circleRes)], 20 * timer.frametime())
+                if segmentSize > 1 then
+                    smooth[i] = lerp(smooth[i], tbl[math.floor(i/segmentSize)+1], 20 * timer.frametime())
+                else
+                    smooth[i] = lerp(smooth[i], tbl[i], 20 * timer.frametime())
+                end
+            end
+        end)
+        
+        local n = 0
+        
+        hook.add("render","meme",function()
+            --for k,v in pairs(smooth) do
+                --render.drawText(0,k*10,k .. ": " .. math.round(v*1000,3))
+            --end
+            
+            for i=1,circleRes do
+                if spin then
+                    h = smooth[((i+math.floor(math.sin(n/200)*360))%circleRes)+1]
+                    h2 = smooth[((i+math.floor(math.sin(n/200)*360)+1)%circleRes)+1]
+                else
+                    h = smooth[i]
+                    h2 = smooth[(i%circleRes)+1]
+                end
+                
+                render.setColor(Color(((i*360/circleRes)+math.floor(n*2))%360,1,1,255):hsvToRGB())
+                render.drawLine(
+                    (1+h*mul)*circleSize*math.sin((i%circleRes)*(360/circleRes)/57.2958)+256, --X1
+                    (1+h*mul)*circleSize*math.cos((i%circleRes)*(360/circleRes)/57.2958)+256, --Y1
+                    (1+h2*mul)*circleSize*math.sin(((i+1)%circleRes)*(360/circleRes)/57.2958)+256, --X2
+                    (1+h2*mul)*circleSize*math.cos(((i+1)%circleRes)*(360/circleRes)/57.2958)+256  --Y2
+                )
+            end
+            if spin then n = n + spinSpeed end
+        end)
+    end)
+end
