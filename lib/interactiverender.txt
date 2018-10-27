@@ -1,0 +1,61 @@
+--[[
+Basic library for buttons in a render context. You can either copy & paste these functions into your script, OR:
+1. Create a folder named 'lib' in your Starfall scripts directory
+2. Save this as 'interactiverender' or whatever
+3. In your chip, at the top add --@include lib/interactiverender.txt (Without the space!)
+4. Add require("lib/interactiverender.txt") to the top of your clientside realm
+
+The addButton function accepts a start X/Y and an end X/Y for the button position, a color for off & on (nil for both if
+you don't want the button to draw anything), a function to run on button press, and an optional function to run
+continously while the button is held.
+
+The inrange function is used by the addButton function, but on its own can be used to check if a 2D vector is within
+a min & max 2D vector range.
+--]]
+
+function inrange(p,pMin,pMax)
+    if p.x > pMin.x and p.x < pMax.x and p.y > pMin.y and p.y < pMax.y then
+        return true
+    end
+    return false
+end
+
+function addButton(x1,y1,x2,y2,colOff,colOn,funcOnce,funcHolding)
+    local cursorX,cursorY = render.cursorPos()
+    
+    local p1 = {
+        x = x1,
+        y = y1
+    }
+    local p2 = {
+        x = x2,
+        y = y2
+    }
+    local cursorPos = {
+        x = cursorX,
+        y = cursorY
+    }
+    
+    local lookingAt = cursorPos.x and cursorPos.y and inrange(cursorPos,p1,p2)
+    
+    if colOff and colOn then
+        if lookingAt then
+            render.setColor(colOn)
+        else
+            render.setColor(colOff)
+        end
+        render.drawRect(x1,y1,x2-x1,y2-y1)
+    end
+    
+    if lookingAt and player():keyDown(IN_KEY.USE) then
+        if player().using == nil then
+            player().using = true
+            funcOnce()
+            sound = sounds.create(chip(),"buttons/button15.wav")
+            sound:play()
+        end
+        if funcHolding then funcHolding() end
+    elseif not player():keyDown(IN_KEY.USE) then
+        player().using = nil
+    end
+end

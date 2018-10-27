@@ -1,0 +1,46 @@
+--A collection of functions taken from Expression 2 that weren't included in Starfall.
+
+--Returns velocity local to E
+function velL(e)
+    if not isValid(e) then return Vector(0,0,0) end
+    return e:worldToLocal(e:getVelocity() + e:getPos())
+end
+
+--Shifts an angle left ( Angle(P,Y,R) -> Angle(Y,R,P) )
+function shiftL(Ang)
+    return Angle(Ang.yaw,Ang.roll,Ang.pitch)
+end
+
+--Clamps an angle, with an singular minimum and maximum for all axes
+function clampAng(Ang, Min, Max)
+    return Angle(math.clamp(Ang.pitch,Min,Max),math.clamp(Ang.yaw,Min,Max),math.clamp(Ang.roll,Min,Max))
+end
+
+--Clamps an angle, with an angular minimum and maximum
+function clampAng2(Ang, Min, Max)
+    return Angle(math.clamp(Ang.pitch,Min.pitch,Max.pitch),math.clamp(Ang.yaw,Min.yaw,Max.yaw),math.clamp(Ang.roll,Min.roll,Max.roll))
+end
+
+--Gets a heading
+function heading(originpos,originangle,pos)
+    local rad2deg = 180/math.pi
+    pos = worldToLocal(Vector(pos[1],pos[2],pos[3]),Angle(0,0,0),Vector(originpos[1],originpos[2],originpos[3]),Angle(originangle[1],originangle[2],originangle[3]))
+    
+    local bearing = rad2deg*-math.atan2(pos.y, pos.x)
+    local len = pos:getLength()
+    if (len < 0.0000001) then return Angle(0, bearing, 0) end
+    return Angle(rad2deg*math.asin(pos.z / len), bearing, 0)
+end
+
+--Converts a world axis into an axis local to E
+function toLocalAxis(e,worldAxis)
+    if not e:isValid() then return {0,0,0} end
+    return e:worldToLocal(Vector(worldAxis[1],worldAxis[2],worldAxis[3])+e:getPos())
+end
+
+--Gets a bearing
+function bearing(e,pos)
+    local rad2deg = 180/math.pi
+    pos = e:worldToLocal(Vector(pos[1],pos[2],pos[3]))
+    return rad2deg*-atan2(pos.y, pos.x)
+end

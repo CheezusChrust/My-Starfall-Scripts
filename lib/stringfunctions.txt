@@ -1,0 +1,26 @@
+--Returns the number of times a word occurs in a string
+--Can be made case-sensitive by removing :lower()
+function countInString(input, word)
+    local _, y = string.gsub(input:lower(), word:lower(), word:lower())
+    return y
+end
+
+--Automatically adds newline character (\n) to a string of text
+--Width can be set to any number of characters
+--Breaks if you have a word longer than the maximum width because i'm too lazy to fix that
+--Returns a string, with newlines added as necessary
+function wrapText(string, width)
+    local pos = width
+    local string = string.gsub(string, "\n", "")
+
+    if string.len(string) < width then
+        return string
+    else
+        local char = string.sub(string, pos, pos)
+        while char != " " do
+            pos = pos - 1
+            char = string.sub(string, pos, pos)
+        end
+        return string.sub(string, 1, pos) .. "\n" .. wrapText( string.sub( string, pos + 1, string.len(string) ), width)
+    end
+end
