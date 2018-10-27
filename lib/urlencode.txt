@@ -1,5 +1,4 @@
---Functions for encoding and decoding URL strings into more easily human-readable form.
---Can also use urlEncode to encode a string into URL form.
+--Functions for encoding and decoding URL strings.
 
 charToHex = function(c)
     return string.format("%%%02X", string.byte(c))
