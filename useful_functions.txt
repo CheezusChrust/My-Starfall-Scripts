@@ -102,6 +102,15 @@ function draw(x, y, col, res)
     render.drawRect(x * (1024/res), y * (1024/res), 1 + (1024/res), 1 + (1024/res))
 end
 
+--Similar to the basic drawRectOutline, but with more flexibility.
+function drawOutlinedBox( x, y, w, h, thickness, color )
+    render.setColor( color )
+    render.drawRect( x, y, w, thickness )
+    render.drawRect( x, y + h - thickness, w, thickness )
+    render.drawRect( x, y + thickness, thickness, h - thickness * 2 )
+    render.drawRect( x + w - thickness, y + thickness, thickness, h - thickness * 2 )
+end
+
 --Returns 1 if the starfall is below the specified quota (0-1), otherwise returns 0
 function canRun(quota)
     if quotaAverage() > quotaMax() * quota or quotaUsed() > quotaMax() * quota then return 0 end
