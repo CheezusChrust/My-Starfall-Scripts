@@ -102,7 +102,7 @@ function draw(x, y, col, res)
     render.drawRect(x * (1024/res), y * (1024/res), 1 + (1024/res), 1 + (1024/res))
 end
 
---Similar to the basic drawRectOutline, but with more flexibility.
+--Similar to the basic drawRectOutline, but with more flexibility. Thickness moves inwards.
 function drawOutlinedBox( x, y, w, h, thickness, color )
     render.setColor( color )
     render.drawRect( x, y, w, thickness )
