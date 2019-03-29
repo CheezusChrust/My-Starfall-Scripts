@@ -2,9 +2,6 @@
 --@author Cheezus
 --@shared
 
---Note: There is still some cases where this chip can error out and delete all the vegetation you've placed.
---I suggest exporting frequently due to this - don't populate your whole map at once only for the chip to die.
-
 --[[
 Basic usage:
 0. Start Hammer on the SAME VERSION of the map you're currently playing on, you may need to do a fresh compile
@@ -44,25 +41,17 @@ if SERVER then
     --]]
     
     vegetation.items = {
+		--You can duplicate any of the { ... } sections for as many models as you need
+	
         {
-            model = "models/props_foliage/ah_grass_512x512_001_flowers.mdl",
+            model = "models/props_foliage/tree_pine05.mdl",
             density = 100,
-            radius = 256,
+            radius = 64,
             heightOffset = 10,
             maxAngle = 15,
-            useGroundAngle = true,
-            type = "grass",
-            fadeStartEnd = {1000,1500}
-        },
-        
-        {
-            model = "models/props_foliage/hedgerow01_medium-bushy.mdl",
-            density = 10,
-            radius = 200,
-            heightOffset = 0,
-            maxAngle = 15,
-            useGroundAngle = true,
-            type = "bush"
+            useGroundAngle = false,
+            type = "tree",
+			fadeStartEnd = nil --nil if you don't want fading, {startdistance,enddistance} if you do
         },
         
         {
@@ -72,7 +61,8 @@ if SERVER then
             heightOffset = 0,
             maxAngle = 35,
             useGroundAngle = false,
-            type = "tree"
+            type = "tree",
+			fadeStartEnd = nil
         },
     }
     
@@ -144,7 +134,7 @@ if SERVER then
         if owner():keyDown(IN_KEY.WALK) then
             ents = find.inSphere(owner():getEyeTrace().HitPos,radius)
             for _,v in pairs(ents) do
-                if vegetation.data[v].type ~= nil then v:remove() end
+                if isValid(v) and vegetation.data[v] and vegetation.data[v].type ~= nil then v:remove() end
             end
         end
     end)
@@ -189,11 +179,11 @@ if SERVER then
             
             if chat[1] == "/export" then
                 if hammer then
-                    local queue = find.byClass("prop_physics",function(ent) if vegetation.data[ent].type then return true end end)
+                    local queue = find.byClass("prop_physics",function(ent) if vegetation.data[ent] then return true end end)
                     
                     hammer.startSession()
                     
-                    print("Export started...")
+                    print("Export started - THIS MAY TAKE A WHILE")
                     
                     local count = 0
                     local startTime = timer.systime()
@@ -201,11 +191,19 @@ if SERVER then
                         while #queue > 0 and canRun(0.5) do
                             local ent = queue[#queue]
                             count = count + 1
-                            hammer.createProp("static",ent:getModel(),ent:getPos(),ent:getAngles())
+                            
+                            try(function()
+                                hammer.createProp("static",ent:getModel(),ent:getPos(),ent:getAngles())
+                            end,function(err) print(err) end)
+                            
                             data = vegetation.data[ent]
                             if data.fadeStartEnd then
-                                hammer.setKeyValue("prop_static",ent:getPos(),"fademindist",data.fadeStartEnd[1])
-                                hammer.setKeyValue("prop_static",ent:getPos(),"fademaxdist",data.fadeStartEnd[2])
+                            
+                                try(function()
+                                    hammer.setKeyValue("prop_static",ent:getPos(),"fademindist",tostring(data.fadeStartEnd[1]))
+                                    hammer.setKeyValue("prop_static",ent:getPos(),"fademaxdist",tostring(data.fadeStartEnd[2]))
+                                end,function(err) print(err) end)
+                                
                             end
                             table.remove(queue)
                         end
@@ -225,7 +223,7 @@ if SERVER then
             
             if chat[1] == "/clear" then
                 if hammer then
-                    local queue = find.byClass("prop_physics",function(ent) if vegetation.data[ent].type then return true end end)
+                    local queue = find.byClass("prop_physics",function(ent) if vegetation.data[ent] then return true end end)
                     
                     hammer.startSession()
                     
