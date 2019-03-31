@@ -41,28 +41,59 @@ if SERVER then
     --]]
     
     vegetation.items = {
-		--You can duplicate any of the { ... } sections for as many models as you need
-	
         {
             model = "models/props_foliage/tree_pine05.mdl",
             density = 100,
-            radius = 64,
-            heightOffset = 10,
-            maxAngle = 15,
+            radius = 150,
+            heightOffset = 0,
+            maxAngle = 25,
             useGroundAngle = false,
             type = "tree",
-			fadeStartEnd = nil --nil if you don't want fading, {startdistance,enddistance} if you do
+            fadeStartEnd = nil
         },
         
         {
-            model = "models/props_foliage/ash02.mdl",
+            model = "models/props_foliage/tree_pine04.mdl",
             density = 100,
-            radius = 100,
+            radius = 150,
             heightOffset = 0,
-            maxAngle = 35,
+            maxAngle = 25,
             useGroundAngle = false,
             type = "tree",
-			fadeStartEnd = nil
+            fadeStartEnd = nil
+        },
+        
+        {
+            model = "models/props_foliage/tree_pine06.mdl",
+            density = 100,
+            radius = 150,
+            heightOffset = 0,
+            maxAngle = 25,
+            useGroundAngle = false,
+            type = "tree",
+            fadeStartEnd = nil
+        },
+        
+        {
+            model = "models/props_foliage/tree_dead01.mdl",
+            density = 20,
+            radius = 150,
+            heightOffset = 0,
+            maxAngle = 25,
+            useGroundAngle = false,
+            type = "tree",
+            fadeStartEnd = nil
+        },
+        
+        {
+            model = "models/props_foliage/tree_pine_large.mdl",
+            density = 20,
+            radius = 150,
+            heightOffset = 0,
+            maxAngle = 25,
+            useGroundAngle = false,
+            type = "tree",
+            fadeStartEnd = nil
         },
     }
     
@@ -85,6 +116,10 @@ if SERVER then
     
     local function vecDiff(v1,v2)
         return math.deg(math.acos(v1:dot(v2)/(v1:getLength()*v2:getLength())))
+    end
+    
+    if prop.spawnRate() < 100 then
+        print("[VegetationPainter] WARNING: Increase sf_props_burstrate and sf_props_burstmax to >100 before using or this chip may error!")
     end
     
     timer.create("paint",0,0,function()
