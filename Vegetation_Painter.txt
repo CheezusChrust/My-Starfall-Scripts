@@ -4,7 +4,7 @@
 
 --[[
 Basic usage:
-0. Start Hammer on the SAME VERSION of the map you're currently playing on, you may need to do a fresh compile
+0. Start Hammer on the SAME VERSION of the map you're currently playing on; you may need to do a fresh compile
 1. Define default radius and physprops you want the vegetation to spawn on
 2. Define whatever foliage items you want placed using table vegetation.items below
 3. Spawn the chip and hold your use key (default E) to place foliage and your walk key (default ALT) to erase
@@ -24,7 +24,7 @@ if SERVER then
     --Spawn vegetation items only on terrain using these physical properties - check site below for numbers
     --https://wiki.garrysmod.com/page/Enums/MAT
     vegetation.physProps = {
-        85 --Grass
+        trace.MAT_GRASS
     }
     
     --[[
@@ -37,11 +37,14 @@ if SERVER then
         useGroundAngle: Make this item conform to the angle of the terrain (good for grass and bushes)
         type: Items of dissimilar types will ignore eachother in terms of whether they can spawn in a certain
             location or not
-        (Optional) fadeStartEnd: Distances at which the item starts and stops fading
+        (Optional) additionalKeyValues: Any additional keyvalues to be added to the entities
+        
+    Additional Information:
+        -You can define keyvalues to be set on ALL entities after the vegetation.items table
     --]]
     
     vegetation.items = {
-        {
+       {
             model = "models/props_foliage/tree_pine05.mdl",
             density = 100,
             radius = 150,
@@ -49,7 +52,6 @@ if SERVER then
             maxAngle = 25,
             useGroundAngle = false,
             type = "tree",
-            fadeStartEnd = nil
         },
         
         {
@@ -60,7 +62,6 @@ if SERVER then
             maxAngle = 25,
             useGroundAngle = false,
             type = "tree",
-            fadeStartEnd = nil
         },
         
         {
@@ -71,7 +72,6 @@ if SERVER then
             maxAngle = 25,
             useGroundAngle = false,
             type = "tree",
-            fadeStartEnd = nil
         },
         
         {
@@ -82,7 +82,11 @@ if SERVER then
             maxAngle = 25,
             useGroundAngle = false,
             type = "tree",
-            fadeStartEnd = nil
+			additionalKeyValues = {
+                ["disableselfshadowing"] = 1,
+                ["disableshadows"] = 1,
+                ["disablevertexlighting"] = 1
+            }
         },
         
         {
@@ -93,8 +97,14 @@ if SERVER then
             maxAngle = 25,
             useGroundAngle = false,
             type = "tree",
-            fadeStartEnd = nil
         },
+    }
+    
+	--All entities placed will receive these keyvalues
+    vegetation.globalKeyValues = {
+        ["screenspacefade"] = 1,
+        ["fademindist"] = 100,
+        ["fademaxdist"] = 90
     }
     
     vegetation.data = {} --stupid workaround for stupid bug
@@ -118,8 +128,14 @@ if SERVER then
         return math.deg(math.acos(v1:dot(v2)/(v1:getLength()*v2:getLength())))
     end
     
+    if quotaMax() < 0.5 then
+        print("[VegetationPainter] WARNING: Increase sf_timebuffer to 0.5 or higher before use!")
+        return false
+    end
+    
     if prop.spawnRate() < 100 then
-        print("[VegetationPainter] WARNING: Increase sf_props_burstrate and sf_props_burstmax to >100 before using or this chip may error!")
+        print("[VegetationPainter] WARNING: Increase sf_props_burstrate and sf_props_burstmax to 100 or higher before use!")
+        return false
     end
     
     timer.create("paint",0,0,function()
@@ -160,10 +176,10 @@ if SERVER then
             --Ensure the ground isn't too steep for the foliage
             if vecDiff(groundTrace.HitNormal,Vector(0,0,1)) > item.maxAngle then return false end
             
-            local tree = prop.create(trace.trace(pos + Vector(0,0,1000),pos + Vector(0,0,-1000)).HitPos+Vector(0,0,item.heightOffset),ang,item.model,true)
+            local tree = prop.create(trace.trace(pos + Vector(0,0,750),pos + Vector(0,0,-750)).HitPos+Vector(0,0,item.heightOffset),ang,item.model,true)
             vegetation.data[tree] = {}
             vegetation.data[tree].type = item.type
-            if item.fadeStartEnd then vegetation.data[tree].fadeStartEnd = item.fadeStartEnd end
+            if item.additionalKeyValues then vegetation.data[tree].additionalKeyValues = item.additionalKeyValues end
         end
         
         if owner():keyDown(IN_KEY.WALK) then
@@ -193,7 +209,7 @@ if SERVER then
         return true
     end
     
-    if not hammer then print("WARNING: Hammer library not detected, get it at https://github.com/CheezusChrust/Starfall-Hammer-Library") end
+    if not hammer then print("[VegetationPainter] WARNING: Hammer library not detected, get it at https://github.com/CheezusChrust/Starfall-Hammer-Library") end
     
     hook.add("PlayerSay","chatmsg",function(ply,text)
         if ply == owner() then
@@ -207,7 +223,7 @@ if SERVER then
                     net.writeInt(radius,16)
                     net.send()
                 else
-                    print("Please specify a radius")
+                    print("[VegetationPainter] Please specify a radius")
                 end
                 return ""
             end
@@ -218,36 +234,43 @@ if SERVER then
                     
                     hammer.startSession()
                     
-                    print("Export started - THIS MAY TAKE A WHILE")
+                    print("[VegetationPainter] Export started - THIS MAY TAKE A WHILE")
                     
                     local count = 0
                     local startTime = timer.systime()
-                    timer.create("processQueue",0,0,function()
-                        while #queue > 0 and canRun(0.5) do
-                            local ent = queue[#queue]
-                            count = count + 1
-                            
-                            try(function()
-                                hammer.createProp("static",ent:getModel(),ent:getPos(),ent:getAngles())
-                            end,function(err) print(err) end)
-                            
-                            data = vegetation.data[ent]
-                            if data.fadeStartEnd then
-                            
+                    timer.simple(1,function()
+                        timer.create("processQueue",0,0,function()
+                            while #queue > 0 and canRun(0.5) do
+                                local ent = queue[#queue]
+                                count = count + 1
+                                
                                 try(function()
-                                    hammer.setKeyValue("prop_static",ent:getPos(),"fademindist",tostring(data.fadeStartEnd[1]))
-                                    hammer.setKeyValue("prop_static",ent:getPos(),"fademaxdist",tostring(data.fadeStartEnd[2]))
+                                    hammer.createProp("static",ent:getModel(),ent:getPos(),ent:getAngles())
                                 end,function(err) print(err) end)
                                 
+                                data = vegetation.data[ent]
+                                
+                                if data.additionalKeyValues then
+                                    for k,v in pairs(data.additionalKeyValues) do
+                                        hammer.setKeyValue("prop_static",ent:getPos(),k,tostring(v))
+                                    end
+                                end
+                                
+                                if vegetation.globalKeyValues then
+                                    for k,v in pairs(vegetation.globalKeyValues) do
+                                        hammer.setKeyValue("prop_static",ent:getPos(),k,tostring(v))
+                                    end
+                                end
+                                
+                                table.remove(queue)
                             end
-                            table.remove(queue)
-                        end
-                        
-                        if #queue == 0 then
-                            print("Exported " .. count .. " entities in " .. secondsToClock(timer.systime()-startTime))
-                            hammer.endSession()
-                            timer.remove("processQueue")
-                        end
+                            
+                            if #queue == 0 then
+                                print("[VegetationPainter] Exported " .. count .. " entities in " .. secondsToClock(timer.systime()-startTime))
+                                hammer.endSession()
+                                timer.remove("processQueue")
+                            end
+                        end)
                     end)
                 else
                     print("Could not export due to missing Hammer library - get it at https://github.com/CheezusChrust/Starfall-Hammer-Library")
@@ -262,7 +285,7 @@ if SERVER then
                     
                     hammer.startSession()
                     
-                    print("Cleanup started...")
+                    print("[VegetationPainter] Cleanup started...")
                     
                     local count = 0
                     local startTime = timer.systime()
@@ -273,20 +296,20 @@ if SERVER then
                             try(function()
                                 hammer.removeEntity("prop_static",ent:getPos())
                             end,function()
-                                print("Tried to clear a non-existent entity!")
+                                print("[VegetationPainter] Tried to clear a non-existent entity!")
                                 timer.remove("processQueue")
                             end)
                             table.remove(queue)
                         end
                         
                         if #queue == 0 then
-                            print("Removed " .. count .. " entities in " .. secondsToClock(timer.systime()-startTime))
+                            print("[VegetationPainter] Removed " .. count .. " entities in " .. secondsToClock(timer.systime()-startTime))
                             hammer.endSession()
                             timer.remove("processQueue")
                         end
                     end)
                 else
-                    print("Could not clear due to missing Hammer library - get it at https://github.com/CheezusChrust/Starfall-Hammer-Library")
+                    print("[VegetationPainter] Could not clear due to missing Hammer library - get it at https://github.com/CheezusChrust/Starfall-Hammer-Library")
                 end
                 
                 return ""
