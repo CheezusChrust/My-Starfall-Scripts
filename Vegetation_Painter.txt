@@ -82,7 +82,7 @@ if SERVER then
             maxAngle = 25,
             useGroundAngle = false,
             type = "tree",
-			additionalKeyValues = {
+	    additionalKeyValues = {
                 ["disableselfshadowing"] = 1,
                 ["disableshadows"] = 1,
                 ["disablevertexlighting"] = 1
