@@ -1,0 +1,113 @@
+--@name xInput
+--@author Cheezus
+--@shared
+
+if SERVER then
+    
+    wire.adjustInputs({"RumbleSoft","RumbleHard"},{"number","number"})
+    
+    local outputs = {
+        "DPAD_UP",
+        "DPAD_DOWN",
+        "DPAD_LEFT",
+        "DPAD_RIGHT",
+        "START",
+        "BACK",
+        "LEFT_THUMB",
+        "LEFT_THUMB_X",
+        "LEFT_THUMB_Y",
+        "RIGHT_THUMB",
+        "RIGHT_THUMB_X",
+        "RIGHT_THUMB_Y",
+        "LEFT_SHOULDER",
+        "RIGHT_SHOULDER",
+        "LEFT_TRIGGER",
+        "RIGHT_TRIGGER",
+        "A",
+        "B",
+        "X",
+        "Y"
+    }
+    
+    local types = {}
+    for _,v in pairs(outputs) do
+        table.insert(types,"number")
+    end
+    wire.adjustOutputs(outputs,types)
+    
+    net.receive("data",function()
+        local data = net.readTable()
+        for k,v in pairs(data) do
+            wire.ports[string.upper(k)] = v
+        end
+        printTable(data)
+    end)
+    
+    hook.add("input","rumbleInput",function(input,value)
+        local rumble = Vector(wire.ports.RumbleSoft,wire.ports.RumbleHard)
+        net.start("rumble")
+        net.writeVector(rumble)
+        net.send(owner(),true)
+    end)
+    
+elseif player() == owner() then
+
+    hook.add("xinputConnected","xinput_detectcontroller",function(id)
+        print("Controller " .. id .. " connected")
+    end)
+    hook.add("xinputDisconnected","xinput_detectcontroller",function(id)
+        print("Controller " .. id .. " disconnected")
+    end)
+    
+    local dataPrev = {}
+    
+    hook.add("think","interval",function()
+        if not xinput.getState(0) then return end
+        
+        local data = {}
+        local dataChanged = {}
+        local hasChanged = false
+        
+        data.dpad_up = xinput.getButton(0,0x0001) and 1 or 0
+        data.dpad_down = xinput.getButton(0,0x0002) and 1 or 0
+        data.dpad_left = xinput.getButton(0,0x0004) and 1 or 0
+        data.dpad_right = xinput.getButton(0,0x0008) and 1 or 0
+        data.start = xinput.getButton(0,0x0010) and 1 or 0
+        data.back = xinput.getButton(0,0x0020) and 1 or 0
+        data.left_thumb = xinput.getButton(0,0x0040) and 1 or 0
+        data.left_thumb_x = xinput.getStick(0,0)
+        _,data.left_thumb_y = xinput.getStick(0,0)
+        data.right_thumb = xinput.getButton(0,0x0080) and 1 or 0
+        data.right_thumb_x = xinput.getStick(0,1)
+        _,data.right_thumb_y = xinput.getStick(0,1)
+        data.left_shoulder = xinput.getButton(0,0x0100) and 1 or 0
+        data.right_shoulder = xinput.getButton(0,0x0200) and 1 or 0
+        data.left_trigger = xinput.getTrigger(0,0)
+        data.right_trigger = xinput.getTrigger(0,1)
+        data.a = xinput.getButton(0,0x1000) and 1 or 0
+        data.b = xinput.getButton(0,0x2000) and 1 or 0
+        data.x = xinput.getButton(0,0x4000) and 1 or 0
+        data.y = xinput.getButton(0,0x8000) and 1 or 0
+        
+        for k,v in pairs(data) do
+            if v ~= dataPrev[k] then
+                hasChanged = true
+                dataChanged[k] = v
+            end
+        end
+        
+        dataPrev = data
+        
+        if hasChanged then
+            net.start("data")
+            net.writeTable(dataChanged)
+            net.send(SERVER,true)
+        end
+    end)
+    
+    net.receive("rumble",function()
+        local rumble = net.readVector()
+        xinput.setRumble(0,rumble.x,rumble.y)
+    end)
+    
+end
