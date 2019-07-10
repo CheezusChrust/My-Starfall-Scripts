@@ -40,7 +40,6 @@ if SERVER then
         for k,v in pairs(data) do
             wire.ports[string.upper(k)] = v
         end
-        printTable(data)
     end)
     
     hook.add("input","rumbleInput",function(input,value)
