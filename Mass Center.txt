@@ -1,0 +1,93 @@
+--@name Mass Center
+--@author Cheezus
+--@shared
+
+if SERVER then
+
+    local hud = prop.createComponent(chip():getPos(),chip():getAngles(),"starfall_hud","models/sprops/rectangles/size_1/rect_3x3x3.mdl",true)
+    hud:linkComponent(chip())
+    hud:setParent(chip())
+    
+    if not chip():isWeldedTo() then
+        print("Spawn this chip on a prop!")
+        return
+    end
+    
+    --Custom constraint filter so we don't get parented props
+    local constraints = {
+        ["Weld"] = true,
+        ["Axis"] = true,
+        ["Rope"] = true,
+        ["Elastic"] = true,
+        ["Ballsocket"] = true
+    }
+    
+    --Re-send prop data every so often to account for newly constrained props
+    --Props on the clientside have no phys objects so we need to send masses too
+    timer.create("sendData",1,0,function()
+        local ents = chip():isWeldedTo():getAllConstrained(constraints)
+        local data = {}
+        for _,ent in pairs(ents) do
+            if ent:getPhysicsObject():isValid() then
+                table.insert(data,{ent,ent:getMass()})
+            end
+        end
+        net.start("sendData")
+        net.writeTable(data)
+        net.send()
+    end)
+    
+else
+    
+    local function com(data)
+        --data[1] is the entity, data[2] is the mass
+        local totalMass = 0
+        local totalMassVec = Vector(0)
+        for _,entData in pairs(data) do
+            if entData[1]:isValid() then
+                totalMass = totalMass + entData[2]
+                totalMassVec = totalMassVec + entData[1]:getPos()*entData[2]
+            end
+        end
+        totalMassVec = totalMassVec/totalMass
+        return totalMassVec, totalMass
+    end    
+    
+    local data = {}
+    
+    net.receive("sendData",function()
+        data = net.readTable()
+    end)
+    
+    hook.add("drawhud","hud",function()
+        if #data > 0 then
+            local massCenter, totalMass = com(data)
+            totalMass = math.floor(totalMass)
+            local toScreen = massCenter:toScreen()
+            
+            render.pushViewMatrix({type="3D"})
+            
+                render.setColor(Color(255,0,0))
+                render.draw3DLine(massCenter+Vector(10,0,0),massCenter-Vector(10,0,0))
+                
+                render.setColor(Color(0,255,0))
+                render.draw3DLine(massCenter+Vector(0,10,0),massCenter-Vector(0,10,0))
+                
+                render.setColor(Color(0,0,255))
+                render.draw3DLine(massCenter+Vector(0,0,10),massCenter-Vector(0,0,10))
+                
+            render.popViewMatrix()
+            
+            local dist = (player():getShootPos() - massCenter):getLength()
+            
+            local str = "Total Mass: " .. tostring(totalMass) .. "kg"
+            
+            render.setColor(Color(0,0,0,200))
+            render.drawRect(toScreen.x + 6000/dist,toScreen.y + 6000/dist,#str*6.5,16)
+            
+            render.setColor(Color(255,255,255))
+            render.drawText(toScreen.x + 6000/dist,toScreen.y + 6000/dist,str,0)
+        end
+    end)
+    
+end
