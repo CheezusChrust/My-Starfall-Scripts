@@ -12,7 +12,7 @@ Basic usage:
 5. Type /clean to remove current vegetation stuff from Hammer (in case you've made a mistake)
     5.1. This will NOT work if you despawn and respawn the chip, in that case you need to remove the vegetation
         in hammer manually. Sorry!
-6. Optional - link this chip to a Starfall HUD component to view the area where foliage will appear/be removed
+6. Press E on the can spawned by the chip to enable the HUD
 --]]
 
 local radius = 500 --Default radius to paint foliage in, in source units
@@ -38,69 +38,39 @@ if SERVER then
         type: Items of dissimilar types will ignore eachother in terms of whether they can spawn in a certain
             location or not
         (Optional) additionalKeyValues: Any additional keyvalues to be added to the entities
-        
+    
+    
+    EXAMPLE:
+        {
+            model = "models/props_foliage/tree_poplar_01.mdl",
+            density = 150,
+            radius = 300,
+            heightOffset = 210,
+            maxAngle = 35,
+            useGroundAngle = false,
+            type = "tree",
+            additionalKeyValues = {
+                ["fademindist"] = 5000,
+                ["fademaxdist"] = 6000
+            }
+        },
+    
     Additional Information:
         -You can define keyvalues to be set on ALL entities after the vegetation.items table
     --]]
     
     vegetation.items = {
        {
-            model = "models/props_foliage/tree_pine05.mdl",
-            density = 100,
-            radius = 150,
+            model = "models/props_foliage/tree_poplar_01.mdl",
+            density = 150,
+            radius = 300,
             heightOffset = 0,
-            maxAngle = 25,
+            maxAngle = 35,
             useGroundAngle = false,
-            type = "tree",
-        },
-        
-        {
-            model = "models/props_foliage/tree_pine04.mdl",
-            density = 100,
-            radius = 150,
-            heightOffset = 0,
-            maxAngle = 25,
-            useGroundAngle = false,
-            type = "tree",
-        },
-        
-        {
-            model = "models/props_foliage/tree_pine06.mdl",
-            density = 100,
-            radius = 150,
-            heightOffset = 0,
-            maxAngle = 25,
-            useGroundAngle = false,
-            type = "tree",
-        },
-        
-        {
-            model = "models/props_foliage/tree_dead01.mdl",
-            density = 20,
-            radius = 150,
-            heightOffset = 0,
-            maxAngle = 25,
-            useGroundAngle = false,
-            type = "tree",
-	    additionalKeyValues = {
-                ["disableselfshadowing"] = 1,
-                ["disableshadows"] = 1,
-                ["disablevertexlighting"] = 1
-            }
-        },
-        
-        {
-            model = "models/props_foliage/tree_pine_large.mdl",
-            density = 20,
-            radius = 150,
-            heightOffset = 0,
-            maxAngle = 25,
-            useGroundAngle = false,
-            type = "tree",
+            type = "tree"
         },
     }
     
-	--All entities placed will receive these keyvalues
     vegetation.globalKeyValues = {
         ["screenspacefade"] = 1,
         ["fademindist"] = 100,
@@ -113,6 +83,10 @@ if SERVER then
     for _,item in pairs(vegetation.items) do
         vegetation.sumOfWeights = vegetation.sumOfWeights + item.density
     end
+    
+    local hud = prop.createComponent(chip():getPos(),chip():getAngles(),"starfall_hud","models/props_junk/garbage_metalcan002a.mdl",true)
+    hud:linkComponent(chip())
+    hud:setParent(chip())
     
     local function weightedSelection()
         local randomWeight = math.rand(1, vegetation.sumOfWeights)
