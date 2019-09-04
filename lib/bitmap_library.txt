@@ -1,0 +1,65 @@
+--@name lib/Bitmap Library
+--@author Cheezus
+
+bmp = {}
+
+--Parse a 16-bit WORD from the binary string
+function bmp.readWORD(str, offset)
+    local loByte = str:byte(offset)
+    local hiByte = str:byte(offset+1)
+    return hiByte*256 + loByte
+end
+
+--Parse a 32-bit DWORD from the binary string
+function bmp.readDWORD(str, offset)
+    local loWord = bmp.readWORD(str, offset)
+    local hiWord = bmp.readWORD(str, offset+2)
+    return hiWord*65536 + loWord
+end
+
+function bmp.decode(str)
+    --BITMAPFILEHEADER
+    if str:sub(1,2) ~= "BM" then throw("[Bitmap Library] Attempted to load non bitmap file") end
+    local bfSize = bmp.readDWORD(str,3)
+    local bfOffBits = bmp.readDWORD(str,11)
+    
+    --BITMAPINFOHEADER
+    local biWidth = bmp.readDWORD(str,19)
+    local biHeight = bmp.readDWORD(str,23)
+    biHeight = math.abs(math.min(biHeight,bit.bnot(biHeight)+1))
+    local biBitCount = bmp.readWORD(str,29)
+    if biBitCount ~= 24 then throw("[Bitmap Library] Only 24-bit bitmap files are supported at this time") end
+    local biCompression = bmp.readDWORD(str,31)
+    if biCompression ~= 0 then throw("[Bitmap Library] Only non-compressed bitmap files are supported at this time") end
+    
+    --Each scanline is padded to be divisible by 4
+    local padding = biWidth%4
+    
+    print("[Bitmap Library] Loaded " .. biWidth .. "x" .. biHeight .. " " .. math.round(bfSize/1000,4) .. "kb bitmap file (" .. padding .. "b padding)")
+    
+    local out = {}
+    
+    for y = 1, biHeight do
+        --                  Start         Scanline Width        Padding
+        local offset = (bfOffBits + 1) + (biWidth*3*(y-1)) + ((y-1)*padding)
+        out[y] = {}
+        for x = 1, biWidth do
+            local b = str:byte(offset)
+            local g = str:byte(offset+1)
+            local r = str:byte(offset+2)
+            offset = offset + 3
+            
+            out[y][x] = Color(r,g,b)
+        end
+    end
+    
+    --Reverse because bitmaps are saved bottom to top
+    out = table.reverse(out)
+    
+    return out,{biWidth,biHeight}
+    
+end
+
+function bmp.encode(str)
+
+end
