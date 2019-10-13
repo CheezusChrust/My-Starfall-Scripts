@@ -1,0 +1,50 @@
+--@name lib/PID
+
+pidLib = {}
+
+function pidLib.create(Kp, Ki, Ki_Clamp, Kd, outputClampFunc)
+    local pidTbl = {}
+    
+    pidTbl.error = 0
+    pidTbl.errorPrev = 0
+    pidTbl.lastTime = 0
+    pidTbl.firstRun = true
+    pidTbl.Kp = Kp
+    pidTbl.Ki = Ki
+    pidTbl.Ki_Clamp = Ki_Clamp
+    pidTbl.Kd = Kd
+    
+    pidTbl.p = 0
+    pidTbl.i = 0
+    pidTbl.d = 0
+    
+    pidTbl.out = 0
+    
+    function pidTbl:update(target, current)
+        self.error = target - current
+        
+        if firstRun then
+            self.errorPrev = error
+            self.lastTime = timer.curtime()
+            self.firstRun = false
+        end
+        
+        local dT = timer.curtime() - self.lastTime
+        
+        self.p = self.error * self.Kp
+        self.i = math.clamp(self.i + (self.error * self.Ki * dT), -self.Ki_Clamp, self.Ki_Clamp)
+        self.d = (self.error - self.errorPrev) * self.Kd * dT
+        
+        self.out = self.p + self.i + self.d
+        
+        self.errorPrev = self.error
+        self.lastTime = timer.curtime()
+    end
+    
+    function pidTbl:output()
+        if outputClampFunc then self.out = outputClampFunc(self.out) end
+        return self.out
+    end
+    
+    return pidTbl
+end

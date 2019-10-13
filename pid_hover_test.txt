@@ -1,0 +1,18 @@
+--@name Hover PID Test
+--@server
+--@include lib/pid.txt
+
+require("lib/pid.txt")
+
+chip():setFrozen(false)
+chip():setMass(24)
+
+local target = chip():getPos().z
+
+local mypid = pidLib.create(30, 100, 300, 20000)
+
+timer.create("fuck", 0, 0, function()
+    mypid:update(target, chip():getPos().z)
+    
+    chip():applyForceCenter(Vector(0,0,mypid:output()))
+end)
