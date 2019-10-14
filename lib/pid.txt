@@ -23,8 +23,8 @@ function pidLib.create(Kp, Ki, Ki_Clamp, Kd, outputClampFunc)
     function pidTbl:update(target, current)
         self.error = target - current
         
-        if firstRun then
-            self.errorPrev = error
+        if self.firstRun then
+            self.errorPrev = self.error
             self.lastTime = timer.curtime()
             self.firstRun = false
         end
@@ -33,7 +33,9 @@ function pidLib.create(Kp, Ki, Ki_Clamp, Kd, outputClampFunc)
         
         self.p = self.error * self.Kp
         self.i = math.clamp(self.i + (self.error * self.Ki * dT), -self.Ki_Clamp, self.Ki_Clamp)
-        self.d = (self.error - self.errorPrev) * self.Kd * dT
+        if dT > 0 then
+            self.d = (self.error - self.errorPrev) * self.Kd / dT
+        end
         
         self.out = self.p + self.i + self.d
         

@@ -4,15 +4,22 @@
 
 require("lib/pid.txt")
 
+wire.adjustOutputs({"Error","P","I","D"},{"number","number","number","number"})
+
 chip():setFrozen(false)
 chip():setMass(24)
 
-local target = chip():getPos().z
+local target = chip():getPos().z + 50
 
-local mypid = pidLib.create(30, 100, 300, 20000)
+local mypid = pidLib.create(30, 100, 300, 5)
 
 timer.create("fuck", 0, 0, function()
     mypid:update(target, chip():getPos().z)
     
     chip():applyForceCenter(Vector(0,0,mypid:output()))
+    
+    wire.ports.Error = mypid.error
+    wire.ports.P = mypid.p
+    wire.ports.I = mypid.i
+    wire.ports.D = mypid.d
 end)
