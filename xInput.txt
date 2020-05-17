@@ -51,6 +51,8 @@ if SERVER then
     
 elseif player() == owner() then
 
+    local thumbDeadZone = 0.1
+
     hook.add("xinputConnected","xinput_detectcontroller",function(id)
         print("Controller " .. id .. " connected")
     end)
@@ -58,10 +60,15 @@ elseif player() == owner() then
         print("Controller " .. id .. " disconnected")
     end)
     
+    local function sign(n)
+        return n >= 0 and 1 or -1
+    end
+    
     local dataPrev = {}
     
-    hook.add("think","interval",function()
+    timer.create("interval",0.05,0,function()
         if not xinput.getState(0) then return end
+        if net.getBytesLeft() == 0 then return end
         
         local data = {}
         local dataChanged = {}
@@ -74,11 +81,15 @@ elseif player() == owner() then
         data.start = xinput.getButton(0,0x0010) and 1 or 0
         data.back = xinput.getButton(0,0x0020) and 1 or 0
         data.left_thumb = xinput.getButton(0,0x0040) and 1 or 0
-        data.left_thumb_x = xinput.getStick(0,0)
-        _,data.left_thumb_y = xinput.getStick(0,0)
+        local leftX = xinput.getStick(0,0)
+        local _,leftY = xinput.getStick(0,0)
+        data.left_thumb_x = math.abs(leftX)/32767 < thumbDeadZone and 0 or sign(leftX) * ((math.abs(leftX)/32767 - thumbDeadZone) / (1 - thumbDeadZone))
+        data.left_thumb_y = math.abs(leftY)/32767 < thumbDeadZone and 0 or sign(leftY) * ((math.abs(leftY)/32767 - thumbDeadZone) / (1 - thumbDeadZone))
         data.right_thumb = xinput.getButton(0,0x0080) and 1 or 0
-        data.right_thumb_x = xinput.getStick(0,1)
-        _,data.right_thumb_y = xinput.getStick(0,1)
+        local rightX = xinput.getStick(0,1)
+        local _,rightY = xinput.getStick(0,1)
+        data.right_thumb_x = math.abs(rightX)/32767 < thumbDeadZone and 0 or sign(rightX) * ((math.abs(rightX)/32767 - thumbDeadZone) / (1 - thumbDeadZone))
+        data.right_thumb_y = math.abs(rightY)/32767 < thumbDeadZone and 0 or sign(rightY) * ((math.abs(rightY)/32767 - thumbDeadZone) / (1 - thumbDeadZone))
         data.left_shoulder = xinput.getButton(0,0x0100) and 1 or 0
         data.right_shoulder = xinput.getButton(0,0x0200) and 1 or 0
         data.left_trigger = xinput.getTrigger(0,0)
