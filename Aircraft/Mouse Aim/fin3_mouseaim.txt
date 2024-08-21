@@ -1,0 +1,441 @@
+--@name Fin3 Mouse Aim 1.0.0
+--@author Cheezus
+--@shared
+--@include lib/pid3.txt
+
+--[[
+
+INSTRUCTIONS:
+1. Spawn this chip and wire everything.
+2. Spawn a starfall HUD entity and link it to both the seat and this chip.
+3. Set "showAxes" to true and update the chip, and set the forwardAxis and upAxis to line up with your aircraft.
+4. Set "showAxes" to false to hide the helper HUD.
+5. Set the camera settings as necessary.
+6. Set the HUD settings as necessary.
+7. Wire any control surfaces to the outputs of the chip.
+8. Adjust PID and throttle settings as necessary.
+
+--]]
+
+-- Orientation settings
+local showAxes = true -- Turn this on to visually see the forward/up vectors defined below (base & seat must be wired)
+local fwdAxis = Vector(-1, 0, 0) -- The FORWARD facing direction of your aircraft
+local upAxis = Vector(0, 0, 1) -- The UP facing direction of your aircraft
+
+-- Camera settings
+local camHeightThirdPerson = 150 -- The height of the camera above the aircraft when in third person
+local camDistThirdPerson = 600 -- The distance of the camera from the aircraft when in third person
+local camPosFirstPerson = Vector(-72, 0, 28) -- The position of the camera relative to the aircraft when in first person
+local thirdPerson = true -- True to start in thirdPerson, false for firstperson
+local defaultFOV = 90 -- FOV when not zoomed in
+local zoomFOV = 40 -- FOV when zoomed in
+
+-- HUD settings
+local enableHUD = true -- Display a basic HUD while in the seat to make precise aiming easier
+local enableHUDFirstPerson = true -- If false, hide the basic HUD when in first person view
+local circleHUD = true -- If true, use a circle like War Thunder instead of a + for the plane's aim
+local outerHUDColor = Color(255, 255, 180)
+local innerHUDColor = Color(255, 255, 180)
+
+--[[
+
+With regards to PID tuning:
+- Kp is the proportional gain, which determines how hard the aircraft tries to pitch/yaw/roll to face your aim direction.
+    - A good value to start at is around 4 for pitch and yaw, and 2 for roll.
+
+- Ki is the integral gain, which generally you won't need to touch.
+- KiMax is the maximum integral value, and again, you generally won't need to touch this.
+- Kd is the derivative gain, which stops the aircraft from oscillating around your aim direction. This can be thought of as damping.
+    - A good value to start at is around 20 for each axis.
+
+--]]
+
+if SERVER then
+    -- PID settings
+    local pitchKp = 4
+    local pitchKi = 0
+    local pitchKiMax = 0
+    local pitchKd = 20
+    local pitchMaxDeflection = 15 -- Maximum control surface deflection, in degrees
+    local pitchDeflectionRate = 200 -- Maximum rate at which the control surface deflection can change, in degrees per second
+
+    local yawKp = 4
+    local yawKi = 0
+    local yawKiMax = 0
+    local yawKd = 20
+    local yawMaxDeflection = 15
+    local yawDeflectionRate = 200
+
+    local rollKp = 2
+    local rollKi = 0
+    local rollKiMax = 0
+    local rollKd = 20
+    local rollMaxDeflection = 15
+    local rollDeflectionRate = 200
+    local rollReturn = 0.1 -- Attempts to return the aircraft to level flight when not turning - start at around 0.1
+    local rollManualRate = 200 -- Target roll rate, in degrees per second, when manually rolling
+
+    local throttleMax = 100 -- Maximum value for throttle output
+    local throttleRate = 100 -- Throttle change per second when increasing/decreasing
+
+    -- End of settings --
+
+    local stringLower = string.lower
+    local rad2deg, atan2 = (180 / math.pi), math.atan2
+    local clamp, sign, abs, approach, max, round = math.clamp, math.sign, math.abs, math.approach, math.max, math.round
+    local inputs = {
+        pitchup = 0,
+        pitchdown = 0,
+        yawleft = 0,
+        yawright = 0,
+        rollleft = 0,
+        rollright = 0,
+        increasethrottle = 0,
+        decreasethrottle = 0
+    }
+    local pitchPID = pid.new(pitchKp, pitchKi, pitchKiMax, pitchKd)
+    local yawPID = pid.new(yawKp, yawKi, yawKiMax, yawKd)
+    local rollPID = pid.new(rollKp, rollKi, rollKiMax, rollKd)
+    local pitchOut, yawOut, rollOut = 0, 0, 0
+    local vector_up = Vector(0, 0, 1)
+    local lastRollAngle = 0
+    local rightAxis = fwdAxis:cross(upAxis)
+    local freelook = false
+    local dt = game.getTickInterval()
+    local throttle = 0
+    local pid = {}
+
+    function pid.new(kp, ki, kiClamp, kd)
+        local newPID = {}
+
+        setmetatable(newPID, {__index = pid})
+
+        newPID.error = 0
+        newPID.kp = kp
+        newPID.ki = ki
+        newPID.kiClamp = kiClamp or math.huge
+        newPID.kd = kd
+        newPID.p = 0
+        newPID.i = 0
+        newPID.d = 0
+        newPID.out = 0
+        pinewPIDd.errorPrev = 0
+
+        return newPID
+    end
+
+    function pid:update(target, current, useCurrentForDTerm)
+        self.error = target - current
+
+        self.p = self.error
+        self.i = self.i + self.error
+
+        if istable(self.kiClamp) then
+            self.i = clamp(self.i, self.kiClamp[1], self.kiClamp[2])
+        else
+            self.i = clamp(self.i, -self.kiClamp, self.kiClamp)
+        end
+
+        local newError = useCurrentForDTerm and -current or self.error
+        self.d = newError - self.errorPrev
+        self.errorPrev = newError
+
+        self.out = (self.p * self.kp) + (self.i * self.ki) + (self.d * self.kd)
+    end
+
+    function pid:getValue()
+        return self.out
+    end
+
+    wire.adjustPorts({
+        Active = "number",
+        Base = "entity",
+        Seat = "entity",
+        PitchUp = "number",
+        PitchDown = "number",
+        YawLeft = "number",
+        YawRight = "number",
+        RollLeft = "number",
+        RollRight = "number",
+        ToggleThirdPerson = "number",
+        ToggleZoom = "number",
+        FreeLook = "number",
+        IncreaseThrottle = "number",
+        DecreaseThrottle = "number"
+    }, {
+        Pitch = "number",
+        Yaw = "number",
+        Roll = "number",
+        Throttle = "number"
+    })
+
+    net.receive("requestEnts", function(_, ply)
+        local base, seat = wire.ports.Base, wire.ports.Seat
+        if not isValid(base) or not isValid(seat) then return end
+
+        net.start("sendEnts")
+        net.writeEntity(base)
+        net.writeEntity(seat)
+        net.send(ply)
+    end)
+
+    hook.add("input", "mouseaim_input", function(name, value)
+        name = stringLower(name)
+        if inputs[name] then inputs[name] = value end
+
+        local seat = wire.ports.Seat
+        if name == "togglethirdperson" and value > 0 and isValid(seat) then
+            thirdPerson = not thirdPerson
+
+            net.start("mouseaim_thirdperson")
+            net.writeBool(thirdPerson)
+            net.send(seat:getDriver())
+        end
+
+        if name == "togglezoom" and value > 0 and isValid(seat) then
+            net.start("mouseaim_zoom")
+            net.send(seat:getDriver())
+        end
+
+        if name == "freelook" then
+            freelook = value ~= 0
+        end
+    end)
+
+    -- Returns an number representing the heading of a vector when projected onto a plane, relative to its x and y axis
+    local function projectGetAngle(v, normAxis, xAxis, yAxis)
+        local projection = v:dot(normAxis) * normAxis
+        local projectedVector = (v - projection):getNormalized()
+        local xComponent = projectedVector:dot(xAxis)
+        local yComponent = projectedVector:dot(yAxis)
+
+        return atan2(xComponent, yComponent) * rad2deg
+    end
+
+    local aimVector = Vector()
+    net.receive("mouseaim_aimvector", function()
+        if not freelook then
+            aimVector = Vector(net.readFloat(), net.readFloat(), net.readFloat())
+        end
+    end)
+
+    hook.add("tick", "mouseaim_think", function()
+        local base, seat = wire.ports.Base, wire.ports.Seat
+        if not isValid(base) or not isValid(seat) or wire.ports.Active == 0 then
+            pitchOut = 0
+            yawOut = 0
+            rollOut = 0
+
+            wire.ports.Pitch = 0
+            wire.ports.Yaw = 0
+            wire.ports.Roll = 0
+
+            return
+        end
+
+        local fwdAxisWorld = base:localToWorldVector(fwdAxis)
+        local upAxisWorld = base:localToWorldVector(upAxis)
+        local rightAxisWorld = base:localToWorldVector(rightAxis)
+
+        local baseRoll = -atan2(rightAxisWorld:dot(vector_up), upAxisWorld:dot(vector_up)) * rad2deg
+        local rollRate = baseRoll - lastRollAngle
+        lastRollAngle = baseRoll
+
+        if rollRate > 180 then rollRate = rollRate - 360 end
+        if rollRate < -180 then rollRate = rollRate + 360 end
+
+        rollRate = rollRate / dt
+
+        local elevation = projectGetAngle(aimVector, rightAxisWorld, upAxisWorld, fwdAxisWorld)
+        local heading = projectGetAngle(aimVector, upAxisWorld, rightAxisWorld, fwdAxisWorld)
+
+        -- Try to return the aircraft to level flight
+        local unroll = sign(baseRoll) * (abs(clamp(baseRoll, -45, 45)) ^ 0.9) * -rollReturn
+
+        pitchPID:update(0, elevation, true)
+        yawPID:update(0, heading, true)
+        rollPID:update(0, heading + unroll, true)
+
+        local manPitch = (inputs.pitchdown - inputs.pitchup) * pitchMaxDeflection
+        local manYaw = (inputs.yawleft - inputs.yawright) * yawMaxDeflection
+        local manRoll = (inputs.rollleft - inputs.rollright) * rollMaxDeflection
+
+        local inPitch = manPitch ~= 0 and manPitch or pitchPID:getValue()
+        local inYaw = (manYaw ~= 0 or manRoll ~= 0) and manYaw or yawPID:getValue()
+        local rollRateTarget = max(rollManualRate - abs(rollRate), 0) / rollManualRate
+        local inRoll = manRoll ~= 0 and (manRoll * rollRateTarget) or rollPID:getValue()
+
+        pitchOut = approach(pitchOut, clamp(inPitch, -pitchMaxDeflection, pitchMaxDeflection), pitchDeflectionRate * dt)
+        yawOut = approach(yawOut, clamp(inYaw, -yawMaxDeflection, yawMaxDeflection), yawDeflectionRate * dt)
+        rollOut = approach(rollOut, clamp(inRoll, -rollMaxDeflection, rollMaxDeflection), rollDeflectionRate * dt)
+
+        throttle = clamp(throttle + (inputs.increasethrottle - inputs.decreasethrottle) * throttleRate * dt, 0, throttleMax)
+
+        wire.ports.Pitch = pitchOut
+        wire.ports.Yaw = yawOut
+        wire.ports.Roll = rollOut
+        wire.ports.Throttle = round(throttle)
+    end)
+else
+    local base, seat
+
+    timer.create("requestEnts", 0.5, 0, function()
+        net.start("requestEnts")
+        net.send()
+    end)
+
+    net.receive("sendEnts", function()
+        base = net.readEntity()
+        seat = net.readEntity()
+
+        timer.stop("requestEnts")
+    end)
+
+    if player() == owner() and showAxes then
+        enableHud(owner(), true)
+
+        local font = render.createFont("Trebuchet24", 24, nil, false, nil, nil, true)
+
+        hook.add("drawHud", "hud", function()
+            if not isValid(base) then return end
+
+            local basePos = base:getPos()
+            local fwd = base:localToWorld(fwdAxis * 50)
+            local up = base:localToWorld(upAxis * 50)
+            local alpha = math.max(300 - owner():getPos():getDistanceSqr(basePos) / 1000, 0)
+
+            if alpha > 0 then
+                render.pushViewMatrix({
+                    type = "3D"
+                })
+
+                render.setColor(Color(255, 0, 0))
+                render.draw3DLine(basePos, fwd)
+
+                render.setColor(Color(0, 255, 0))
+                render.draw3DLine(basePos, up)
+
+                render.popViewMatrix()
+
+                local fwdScr = fwd:toScreen()
+                local upScr = up:toScreen()
+
+                render.setFont(font)
+
+                render.setColor(Color(255, 0, 0, alpha))
+                render.drawSimpleText(fwdScr.x, fwdScr.y, "Forward", 1, 1)
+
+                render.setColor(Color(0, 255, 0, alpha))
+                render.drawSimpleText(upScr.x, upScr.y, "Up", 1, 1)
+            end
+        end)
+    end
+
+    local zoom = false
+
+    net.receive("mouseaim_thirdperson", function()
+        thirdPerson = net.readBool()
+    end)
+
+    net.receive("mouseaim_zoom", function()
+        zoom = not zoom
+    end)
+
+    local camHull = Vector(4)
+    local camOffsetPos = Vector(0, 0, camHeightThirdPerson)
+    local aimVector = Vector()
+    local lastAimVector = Vector()
+
+    hook.add("tick", "mouseaim_aimvector", function()
+        if not isValid(base) or not isValid(seat) then return end
+        if player():getVehicle() ~= seat then return end
+
+        if aimVector ~= lastAimVector then
+            net.start("mouseaim_aimvector")
+            net.writeFloat(aimVector.x)
+            net.writeFloat(aimVector.y)
+            net.writeFloat(aimVector.z)
+            net.send()
+
+            lastAimVector = aimVector
+        end
+    end)
+
+    hook.add("calcview", "mouseaim_camera", function()
+        if not isValid(base) or not isValid(seat) then return end
+        if player():getVehicle() ~= seat then return end
+
+        local basePos = base:getPos()
+        local curAng = player():getEyeAngles()
+        aimVector = curAng:getForward()
+        local camPos
+
+        if thirdPerson then
+            local camCenter = basePos + camOffsetPos
+            camPos = camCenter - aimVector * camDistThirdPerson
+
+            local camHitWorldTrace = trace.hull(camCenter, camPos, -camHull, camHull, nil, MASK.SOLID_BRUSHONLY)
+
+            if camHitWorldTrace.Hit then
+                camPos = camHitWorldTrace.HitPos
+            end
+        else
+            camPos = base:localToWorld(camPosFirstPerson)
+        end
+
+        local aimPos = trace.line(camPos, camPos + aimVector * 100000, nil, MASK.SOLID_BRUSHONLY).HitPos
+
+        aimVector = (aimPos - basePos):getNormalized() -- Correct for cam height offset
+
+        return {
+            origin = camPos,
+            drawviewer = thirdPerson,
+            fov = zoom and zoomFOV or defaultFOV,
+            angles = curAng
+        }
+    end)
+
+    local centerX, centerY = render.getGameResolution()
+    centerX = centerX / 2
+    centerY = centerY / 2
+
+    local color_black = Color(0, 0, 0)
+
+    -- For some reason the regular function here requires a valid physobj
+    local ENTITY = getMethods("Entity")
+    function ENTITY:localToWorldVector(v)
+        return self:localToWorld(v) - self:getPos()
+    end
+
+    hook.add("drawhud", "mouseaim_hud", function()
+        if not enableHUD then return end
+        if not isValid(base) or not isValid(seat) then return end
+        if player():getVehicle() ~= seat then return end
+        if not thirdPerson and not enableHUDFirstPerson then return end
+        local basePos = base:getPos()
+
+        render.setColor(outerHUDColor)
+        render.drawCircle(centerX, centerY, 22)
+
+        local aimPos = trace.line(basePos, basePos + base:localToWorldVector(fwdAxis) * 100000, nil, MASK.SOLID_BRUSHONLY).HitPos:toScreen()
+        local aimX = aimPos.x
+        local aimY = aimPos.y
+
+        render.setColor(innerHUDColor)
+        if circleHUD then
+            render.drawCircle(aimX, aimY, 8)
+            render.drawCircle(aimX, aimY, 1)
+        else
+            render.drawRectFast(aimX - 2, aimY - 20, 4, 16)
+            render.drawRectFast(aimX - 2, aimY + 4, 4, 16)
+            render.drawRectFast(aimX - 20, aimY - 2, 16, 4)
+            render.drawRectFast(aimX + 4, aimY - 2, 16, 4)
+
+            render.setColor(color_black)
+            render.drawRectOutline(aimX - 2, aimY - 20, 4, 16)
+            render.drawRectOutline(aimX - 2, aimY + 4, 4, 16)
+            render.drawRectOutline(aimX - 20, aimY - 2, 16, 4)
+            render.drawRectOutline(aimX + 4, aimY - 2, 16, 4)
+        end
+    end)
+end
