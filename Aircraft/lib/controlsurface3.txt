@@ -1,0 +1,58 @@
+--@name lib/controlsurface3
+--@author Cheezus
+
+local deg, atan, sign = math.deg, math.atan, math.sign
+
+local ControlSurface = {}
+function ControlSurface:new(base, ent, axisEnt)
+    local surface = {}
+    setmetatable(surface, {__index = ControlSurface})
+
+    local worldEntAngle = ent:getAngles()
+    surface.ent = ent
+    surface.base = base
+    surface.startAng = base:worldToLocalAngles(worldEntAngle)
+    surface.rotAxis = base:worldToLocalVector(axisEnt:getRight())
+    surface.rotAxisPos = base:worldToLocal(axisEnt:getPos())
+    surface.startPos = base:worldToLocal(ent:getPos())
+    surface.curAng = 0
+
+    surface.forward = ent:worldToLocalVector(axisEnt:getForward())
+    surface.up = ent:worldToLocalVector(axisEnt:getUp())
+    surface.right = ent:worldToLocalVector(axisEnt:getRight())
+
+    ent:setParent()
+    ent:setParent(base)
+
+    return surface
+end
+
+function ControlSurface:setAngle(ang)
+    if ang == self.curAng then return end
+
+    local rotatedAng = self.startAng:rotateAroundAxis(self.rotAxis, ang)
+    local rotatedPos = (self.startPos - self.rotAxisPos):rotateAroundAxis(self.rotAxis, ang) + self.rotAxisPos
+    self.ent:setAngles(self.base:localToWorldAngles(rotatedAng))
+    self.ent:setPos(rotatedPos)
+
+    self.curAng = ang
+end
+
+function ControlSurface:getAoA()
+    local vel = self.ent:getVelocity()
+    local velLen = vel:getLength()
+
+    if velLen == 0 then return 0 end
+
+    local fwd = self.forward
+    local right = self.right
+    local up = self.up
+
+    local curAng = self.curAng
+    local fwdVel = vel:dot(self.ent:localToWorldVector(fwd:rotateAroundAxis(right, curAng)))
+    local upVel = vel:dot(self.ent:localToWorldVector(up:rotateAroundAxis(right, curAng)))
+
+    return deg(atan(upVel / fwdVel)) * -sign(fwdVel)
+end
+
+return ControlSurface

@@ -1,0 +1,65 @@
+--@name Basic Control Surfaces
+--@server
+--@include lib/controlsurface3.txt
+
+local ControlSurface = require("lib/controlsurface3.txt")
+
+wire.adjustPorts({
+    Pitch = "number",
+    Yaw = "number",
+    Roll = "number",
+    Active = "number",
+    Base = "entity",
+    LAileron = "entity",
+    LAileronAxis = "entity",
+    RAileron = "entity",
+    RAileronAxis = "entity",
+    Elevator = "entity",
+    ElevatorAxis = "entity",
+    Rudder = "entity",
+    RudderAxis = "entity"
+})
+
+local base = wire.ports.Base
+local aileronL, aileronR = wire.ports.LAileron, wire.ports.RAileron
+local aileronAxisL, aileronAxisR = wire.ports.LAileronAxis, wire.ports.RAileronAxis
+local elevator, elevatorAxis = wire.ports.Elevator, wire.ports.ElevatorAxis
+local rudder, rudderAxis = wire.ports.Rudder, wire.ports.RudderAxis
+
+local csAileronL, csAileronR, csElevator, csRudder
+
+if isValid(aileronL) and isValid(aileronAxisL) then
+    csAileronL = ControlSurface:new(base, aileronL, aileronAxisL)
+end
+
+if isValid(aileronR) and isValid(aileronAxisR) then
+    csAileronR = ControlSurface:new(base, aileronR, aileronAxisR)
+end
+
+if isValid(elevator) and isValid(elevatorAxis) then
+    csElevator = ControlSurface:new(base, elevator, elevatorAxis)
+end
+
+if isValid(rudder) and isValid(rudderAxis) then
+    csRudder = ControlSurface:new(base, rudder, rudderAxis)
+end
+
+hook.add("think", "interval", function()
+    local pitch, yaw, roll = wire.ports.Pitch, wire.ports.Yaw, wire.ports.Roll
+
+    if csAileronL and isValid(csAileronL.ent) then
+        csAileronL:setAngle(roll)
+    end
+
+    if csAileronR and isValid(csAileronR.ent) then
+        csAileronR:setAngle(-roll)
+    end
+
+    if csElevator and isValid(csElevator.ent) then
+        csElevator:setAngle(-pitch)
+    end
+
+    if csRudder and isValid(csRudder.ent) then
+        csRudder:setAngle(yaw)
+    end
+end)
