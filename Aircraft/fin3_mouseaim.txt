@@ -1,4 +1,4 @@
---@name Fin3 Mouse Aim 1.0.0
+--@name Fin3 Mouse Aim 1.0.1
 --@author Cheezus
 --@shared
 --@include lib/pid3.txt
@@ -80,6 +80,7 @@ if SERVER then
 
     -- End of settings --
 
+    local pid = require("lib/pid3.txt")
     local stringLower = string.lower
     local rad2deg, atan2 = (180 / math.pi), math.atan2
     local clamp, sign, abs, approach, max, round = math.clamp, math.sign, math.abs, math.approach, math.max, math.round
@@ -103,49 +104,6 @@ if SERVER then
     local freelook = false
     local dt = game.getTickInterval()
     local throttle = 0
-    local pid = {}
-
-    function pid.new(kp, ki, kiClamp, kd)
-        local newPID = {}
-
-        setmetatable(newPID, {__index = pid})
-
-        newPID.error = 0
-        newPID.kp = kp
-        newPID.ki = ki
-        newPID.kiClamp = kiClamp or math.huge
-        newPID.kd = kd
-        newPID.p = 0
-        newPID.i = 0
-        newPID.d = 0
-        newPID.out = 0
-        pinewPIDd.errorPrev = 0
-
-        return newPID
-    end
-
-    function pid:update(target, current, useCurrentForDTerm)
-        self.error = target - current
-
-        self.p = self.error
-        self.i = self.i + self.error
-
-        if istable(self.kiClamp) then
-            self.i = clamp(self.i, self.kiClamp[1], self.kiClamp[2])
-        else
-            self.i = clamp(self.i, -self.kiClamp, self.kiClamp)
-        end
-
-        local newError = useCurrentForDTerm and -current or self.error
-        self.d = newError - self.errorPrev
-        self.errorPrev = newError
-
-        self.out = (self.p * self.kp) + (self.i * self.ki) + (self.d * self.kd)
-    end
-
-    function pid:getValue()
-        return self.out
-    end
 
     wire.adjustPorts({
         Active = "number",
