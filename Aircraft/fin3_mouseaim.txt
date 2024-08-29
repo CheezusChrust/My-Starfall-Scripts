@@ -1,4 +1,4 @@
---@name Fin3 Mouse Aim 1.0.1
+--@name Fin3 Mouse Aim v1.1.0
 --@author Cheezus
 --@shared
 --@include lib/pid3.txt
@@ -78,6 +78,8 @@ if SERVER then
     local throttleMax = 100 -- Maximum value for throttle output
     local throttleRate = 100 -- Throttle change per second when increasing/decreasing
 
+    local idealSpeed = 300 -- The normal expected speed of your aircraft, in km/h
+
     -- End of settings --
 
     local pid = require("lib/pid3.txt")
@@ -94,15 +96,15 @@ if SERVER then
         increasethrottle = 0,
         decreasethrottle = 0
     }
-    local pitchPID = pid.new(pitchKp, pitchKi, pitchKiMax, pitchKd)
-    local yawPID = pid.new(yawKp, yawKi, yawKiMax, yawKd)
-    local rollPID = pid.new(rollKp, rollKi, rollKiMax, rollKd)
+    local dt = game.getTickInterval()
+    local pitchPID = pid.new(pitchKp, pitchKi * dt, pitchKiMax / dt, pitchKd)
+    local yawPID = pid.new(yawKp, yawKi * dt, yawKiMax / dt, yawKd)
+    local rollPID = pid.new(rollKp, rollKi * dt, rollKiMax / dt, rollKd)
     local pitchOut, yawOut, rollOut = 0, 0, 0
     local vector_up = Vector(0, 0, 1)
     local lastRollAngle = 0
     local rightAxis = fwdAxis:cross(upAxis)
     local freelook = false
-    local dt = game.getTickInterval()
     local throttle = 0
 
     wire.adjustPorts({
@@ -204,6 +206,9 @@ if SERVER then
 
         rollRate = rollRate / dt
 
+        local baseVelKmh = base:getVelocity():getLength() / 10.9361
+        local effectivenessRatio = clamp((baseVelKmh / idealSpeed) ^ 2, 0.5, 5)
+
         local elevation = projectGetAngle(aimVector, rightAxisWorld, upAxisWorld, fwdAxisWorld)
         local heading = projectGetAngle(aimVector, upAxisWorld, rightAxisWorld, fwdAxisWorld)
 
@@ -218,10 +223,10 @@ if SERVER then
         local manYaw = (inputs.yawleft - inputs.yawright) * yawMaxDeflection
         local manRoll = (inputs.rollleft - inputs.rollright) * rollMaxDeflection
 
-        local inPitch = manPitch ~= 0 and manPitch or pitchPID:getValue()
-        local inYaw = (manYaw ~= 0 or manRoll ~= 0) and manYaw or yawPID:getValue()
-        local rollRateTarget = max(rollManualRate - abs(rollRate), 0) / rollManualRate
-        local inRoll = manRoll ~= 0 and (manRoll * rollRateTarget) or rollPID:getValue()
+        local inPitch = manPitch ~= 0 and manPitch or (pitchPID:getValue() / effectivenessRatio)
+        local inYaw = manYaw ~= 0 and manYaw or (yawPID:getValue() / effectivenessRatio)
+        local rollMul = max(abs(-sign(manRoll) * rollManualRate - rollRate) / rollManualRate, 0)
+        local inRoll = manRoll ~= 0 and (manRoll * rollMul) or (rollPID:getValue() / effectivenessRatio)
 
         pitchOut = approach(pitchOut, clamp(inPitch, -pitchMaxDeflection, pitchMaxDeflection), pitchDeflectionRate * dt)
         yawOut = approach(yawOut, clamp(inYaw, -yawMaxDeflection, yawMaxDeflection), yawDeflectionRate * dt)
