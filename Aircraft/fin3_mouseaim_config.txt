@@ -1,0 +1,75 @@
+--@name Fin3 Mouse Aim Config
+--@server
+
+local config = {}
+
+-- Orientation settings
+config.showAxes = 0 -- Turn this on to visually see the forward/up vectors defined below (base & seat must be wired)
+config.fwdAxis = Vector(-1, 0, 0) -- The FORWARD facing direction of your aircraft
+config.upAxis = Vector(0, 0, 1) -- The UP facing direction of your aircraft
+
+-- Camera settings
+config.camHeightThirdPerson = 150 -- The height of the camera above the aircraft when in third person
+config.camDistThirdPerson = 600 -- The distance of the camera from the aircraft when in third person
+config.camPosFirstPerson = Vector(-72, 0, 28) -- The position of the camera relative to the aircraft when in first person
+config.thirdPerson = 1 -- 1 to start in thirdPerson, 0 for firstperson
+config.defaultFOV = 90 -- FOV when not zoomed in
+config.zoomFOV = 40 -- FOV when zoomed in
+
+-- HUD settings
+config.enableHUD = 1 -- Display a basic HUD while in the seat to make precise aiming easier
+config.enableHUDFirstPerson = 1 -- If 0, hide the basic HUD when in first person view
+config.circleHUD = 1 -- If 1, use a circle like War Thunder instead of a + for the plane's aim
+config.outerHUDColor = Color(255, 255, 180)
+config.innerHUDColor = Color(255, 255, 180)
+
+--[[
+
+With regards to PID tuning:
+- Kp is the proportional gain, which determines how hard the aircraft tries to pitch/yaw/roll to face your aim direction.
+    - A good value to start at is around 4 for pitch and yaw, and 2 for roll.
+
+- Ki is the integral gain, which generally you won't need to touch.
+- KiMax is the maximum integral value, and again, you generally won't need to touch this.
+- Kd is the derivative gain, which stops the aircraft from oscillating around your aim direction. This can be thought of as damping.
+    - A good value to start at is around 20 for each axis.
+
+--]]
+
+
+-- PID settings
+config.pitchKp = 7
+config.pitchKi = 0
+config.pitchKiMax = 0
+config.pitchKd = 150
+config.pitchMaxDeflection = 17 -- Maximum control surface deflection, in degrees
+config.pitchDeflectionRate = 300 -- Maximum rate at which the control surface deflection can change, in degrees per second
+
+config.yawKp = 8.5
+config.yawKi = 0
+config.yawKiMax = 0
+config.yawKd = 90
+config.yawMaxDeflection = 20
+config.yawDeflectionRate = 300
+
+config.rollKp = 2
+config.rollKi = 0
+config.rollKiMax = 0
+config.rollKd = 30
+config.rollMaxDeflection = 15
+config.rollDeflectionRate = 300
+config.rollReturn = 0.075 -- Attempts to return the aircraft to level flight when not turning - start at around 0.1
+config.rollManualRate = 250 -- Target roll rate, in degrees per second, when manually rolling
+
+config.throttleMax = 100 -- Maximum value for throttle output
+config.throttleRate = 100 -- Throttle change per second when increasing/decreasing
+
+config.idealSpeed = 300 -- The normal expected speed of your aircraft, in km/h
+
+-- Don't touch below here
+
+wire.adjustPorts(nil, {
+    Config = "table"
+})
+
+wire.ports.Config = config

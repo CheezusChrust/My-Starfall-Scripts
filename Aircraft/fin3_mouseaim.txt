@@ -1,113 +1,14 @@
---@name Fin3 Mouse Aim v1.1.0
+--@name Fin3 Mouse Aim v2.1.0
 --@author Cheezus
 --@shared
 --@include lib/pid3.txt
 
---[[
-
-INSTRUCTIONS:
-1. Spawn this chip and wire everything.
-2. Spawn a starfall HUD entity and link it to both the seat and this chip.
-3. Set "showAxes" to true and update the chip, and set the forwardAxis and upAxis to line up with your aircraft.
-4. Set "showAxes" to false to hide the helper HUD.
-5. Set the camera settings as necessary.
-6. Set the HUD settings as necessary.
-7. Wire any control surfaces to the outputs of the chip.
-8. Adjust PID and throttle settings as necessary.
-
---]]
-
--- Orientation settings
-local showAxes = true -- Turn this on to visually see the forward/up vectors defined below (base & seat must be wired)
-local fwdAxis = Vector(-1, 0, 0) -- The FORWARD facing direction of your aircraft
-local upAxis = Vector(0, 0, 1) -- The UP facing direction of your aircraft
-
--- Camera settings
-local camHeightThirdPerson = 150 -- The height of the camera above the aircraft when in third person
-local camDistThirdPerson = 600 -- The distance of the camera from the aircraft when in third person
-local camPosFirstPerson = Vector(-72, 0, 28) -- The position of the camera relative to the aircraft when in first person
-local thirdPerson = true -- True to start in thirdPerson, false for firstperson
-local defaultFOV = 90 -- FOV when not zoomed in
-local zoomFOV = 40 -- FOV when zoomed in
-
--- HUD settings
-local enableHUD = true -- Display a basic HUD while in the seat to make precise aiming easier
-local enableHUDFirstPerson = true -- If false, hide the basic HUD when in first person view
-local circleHUD = true -- If true, use a circle like War Thunder instead of a + for the plane's aim
-local outerHUDColor = Color(255, 255, 180)
-local innerHUDColor = Color(255, 255, 180)
-
---[[
-
-With regards to PID tuning:
-- Kp is the proportional gain, which determines how hard the aircraft tries to pitch/yaw/roll to face your aim direction.
-    - A good value to start at is around 4 for pitch and yaw, and 2 for roll.
-
-- Ki is the integral gain, which generally you won't need to touch.
-- KiMax is the maximum integral value, and again, you generally won't need to touch this.
-- Kd is the derivative gain, which stops the aircraft from oscillating around your aim direction. This can be thought of as damping.
-    - A good value to start at is around 20 for each axis.
-
---]]
+-- DO NOT EDIT ANYTHING IN HERE!
+-- Do all configuration in the config chip and wire this chip to it
 
 if SERVER then
-    -- PID settings
-    local pitchKp = 4
-    local pitchKi = 0
-    local pitchKiMax = 0
-    local pitchKd = 20
-    local pitchMaxDeflection = 15 -- Maximum control surface deflection, in degrees
-    local pitchDeflectionRate = 200 -- Maximum rate at which the control surface deflection can change, in degrees per second
-
-    local yawKp = 4
-    local yawKi = 0
-    local yawKiMax = 0
-    local yawKd = 20
-    local yawMaxDeflection = 15
-    local yawDeflectionRate = 200
-
-    local rollKp = 2
-    local rollKi = 0
-    local rollKiMax = 0
-    local rollKd = 20
-    local rollMaxDeflection = 15
-    local rollDeflectionRate = 200
-    local rollReturn = 0.1 -- Attempts to return the aircraft to level flight when not turning - start at around 0.1
-    local rollManualRate = 200 -- Target roll rate, in degrees per second, when manually rolling
-
-    local throttleMax = 100 -- Maximum value for throttle output
-    local throttleRate = 100 -- Throttle change per second when increasing/decreasing
-
-    local idealSpeed = 300 -- The normal expected speed of your aircraft, in km/h
-
-    -- End of settings --
-
-    local pid = require("lib/pid3.txt")
-    local stringLower = string.lower
-    local rad2deg, atan2 = (180 / math.pi), math.atan2
-    local clamp, sign, abs, approach, max, round = math.clamp, math.sign, math.abs, math.approach, math.max, math.round
-    local inputs = {
-        pitchup = 0,
-        pitchdown = 0,
-        yawleft = 0,
-        yawright = 0,
-        rollleft = 0,
-        rollright = 0,
-        increasethrottle = 0,
-        decreasethrottle = 0
-    }
-    local dt = game.getTickInterval()
-    local pitchPID = pid.new(pitchKp, pitchKi * dt, pitchKiMax / dt, pitchKd)
-    local yawPID = pid.new(yawKp, yawKi * dt, yawKiMax / dt, yawKd)
-    local rollPID = pid.new(rollKp, rollKi * dt, rollKiMax / dt, rollKd)
-    local pitchOut, yawOut, rollOut = 0, 0, 0
-    local vector_up = Vector(0, 0, 1)
-    local lastRollAngle = 0
-    local rightAxis = fwdAxis:cross(upAxis)
-    local freelook = false
-    local throttle = 0
-
     wire.adjustPorts({
+        Config = "table",
         Active = "number",
         Base = "entity",
         Seat = "entity",
@@ -129,6 +30,86 @@ if SERVER then
         Throttle = "number"
     })
 
+    local stringLower = string.lower
+    local rad2deg, atan2 = (180 / math.pi), math.atan2
+    local clamp, sign, abs, approach, max, round = math.clamp, math.sign, math.abs, math.approach, math.max, math.round
+    local inputs = {
+        pitchup = 0,
+        pitchdown = 0,
+        yawleft = 0,
+        yawright = 0,
+        rollleft = 0,
+        rollright = 0,
+        increasethrottle = 0,
+        decreasethrottle = 0
+    }
+    local pitchOut, yawOut, rollOut = 0, 0, 0
+    local vector_up = Vector(0, 0, 1)
+    local lastRollAngle = 0
+    local freelook = false
+    local throttle = 0
+    local fwdAxis, upAxis, rightAxis, pitchKp, pitchKi, pitchKiMax, pitchKd, pitchMaxDeflection, pitchDeflectionRate
+    local yawKp, yawKi, yawKiMax, yawKd, yawMaxDeflection, yawDeflectionRate
+    local rollKp, rollKi, rollKiMax, rollKd, rollMaxDeflection, rollDeflectionRate, rollReturn, rollManualRate
+    local throttleMax, throttleRate, idealSpeed
+    local pid = require("lib/pid3.txt")
+    local dt = game.getTickInterval()
+
+    local function updateConfig()
+        local config = wire.ports.Config or {}
+
+        fwdAxis = config.fwdAxis or Vector(1, 0, 0)
+        upAxis = config.upAxis or Vector(0, 0, 1)
+        rightAxis = fwdAxis:cross(upAxis)
+
+        pitchKp = config.pitchKp or 4
+        pitchKi = config.pitchKi or 0
+        pitchKiMax = config.pitchKiMax or 0
+        pitchKd = config.pitchKd or 30
+        pitchMaxDeflection = config.pitchMaxDeflection or 15
+        pitchDeflectionRate = config.pitchDeflectionRate or 200
+
+        yawKp = config.yawKp or 4
+        yawKi = config.yawKi or 0
+        yawKiMax = config.yawKiMax or 0
+        yawKd = config.yawKd or 30
+        yawMaxDeflection = config.yawMaxDeflection or 15
+        yawDeflectionRate = config.yawDeflectionRate or 200
+
+        rollKp = config.rollKp or 2
+        rollKi = config.rollKi or 0
+        rollKiMax = config.rollKiMax or 0
+        rollKd = config.rollKd or 30
+        rollMaxDeflection = config.rollMaxDeflection or 15
+        rollDeflectionRate = config.rollDeflectionRate or 200
+        rollReturn = config.rollReturn or 0.075
+        rollManualRate = config.rollManualRate or 200
+
+        throttleMax = config.throttleMax or 100
+        throttleRate = config.throttleRate or 100
+
+        idealSpeed = config.idealSpeed or 300
+
+        pitchPID = pid.new(pitchKp, pitchKi * dt, pitchKiMax / dt, pitchKd)
+        yawPID = pid.new(yawKp, yawKi * dt, yawKiMax / dt, yawKd)
+        rollPID = pid.new(rollKp, rollKi * dt, rollKiMax / dt, rollKd)
+    end
+
+    local function sendConfig(ply)
+        local config = wire.ports.Config or {}
+
+        net.start("sendConfig")
+        local configData = bit.compress(von.serialize(config))
+        local len = #configData
+        net.writeUInt(len, 16)
+        net.writeData(configData, len)
+        net.send(ply)
+    end
+
+    timer.simple(0.1, function()
+        updateConfig()
+    end)
+
     net.receive("requestEnts", function(_, ply)
         local base, seat = wire.ports.Base, wire.ports.Seat
         if not isValid(base) or not isValid(seat) then return end
@@ -137,6 +118,17 @@ if SERVER then
         net.writeEntity(base)
         net.writeEntity(seat)
         net.send(ply)
+    end)
+
+    net.receive("requestConfig", function(_, ply)
+        if table.count(wire.ports.Config) == 0 then return end
+
+        sendConfig(ply)
+    end)
+
+    local configUpdateReady = false
+    timer.simple(1, function()
+        configUpdateReady = true
     end)
 
     hook.add("input", "mouseaim_input", function(name, value)
@@ -160,9 +152,16 @@ if SERVER then
         if name == "freelook" then
             freelook = value ~= 0
         end
+
+        if name == "config" and table.count(wire.ports.Config) > 0 and configUpdateReady then
+            updateConfig()
+            sendConfig()
+            
+            print(Color(255, 255, 255), "Mouse aim config updated!")
+        end
     end)
 
-    -- Returns an number representing the heading of a vector when projected onto a plane, relative to its x and y axis
+    -- Returns a number representing the heading of a vector when projected onto a plane, relative to its x and y axis
     local function projectGetAngle(v, normAxis, xAxis, yAxis)
         local projection = v:dot(normAxis) * normAxis
         local projectedVector = (v - projection):getNormalized()
@@ -240,27 +239,90 @@ if SERVER then
         wire.ports.Throttle = round(throttle)
     end)
 else
+    -- Default config options
+    local showAxes = false
+    local fwdAxis = Vector(1, 0, 0)
+    local upAxis = Vector(0, 0, 1)
+
+    local camHeightThirdPerson = 150
+    local camDistThirdPerson = 600
+    local camPosFirstPerson = Vector(130, 2, 49)
+    local thirdPerson = true
+    local defaultFOV = 90
+    local zoomFOV = 40
+
+    local enableHUD = true
+    local enableHUDFirstPerson = true
+    local circleHUD = true
+    local outerHUDColor = Color(255, 255, 180)
+    local innerHUDColor = Color(255, 255, 180)
+
     local base, seat
 
-    timer.create("requestEnts", 0.5, 0, function()
+    timer.create("requestEnts", 1, 0, function()
         net.start("requestEnts")
         net.send()
     end)
 
-    net.receive("sendEnts", function()
-        base = net.readEntity()
-        seat = net.readEntity()
-
-        timer.stop("requestEnts")
+    timer.create("requestConfig", 1, 0, function()
+        net.start("requestConfig")
+        net.send()
     end)
 
-    if player() == owner() and showAxes then
-        enableHud(owner(), true)
+    net.receive("sendEnts", function()
+        timer.stop("requestEnts")
+        base = net.readEntity()
+        seat = net.readEntity()
+    end)
 
+    net.receive("sendConfig", function()
+        timer.stop("requestConfig")
+
+        local len = net.readUInt(16)
+        local configData = bit.decompress(net.readData(len))
+        local configTable = von.deserialize(configData)
+
+        if configTable.showAxes ~= nil then
+            showAxes = (configTable.showAxes == 1)
+        end
+
+        if player() == owner() and showAxes then
+            enableHud(owner(), true)
+        end
+
+        fwdAxis = configTable.fwdAxis or fwdAxis
+        upAxis = configTable.upAxis or upAxis
+
+        camHeightThirdPerson = configTable.camHeightThirdPerson or camHeightThirdPerson
+        camDistThirdPerson = configTable.camDistThirdPerson or camDistThirdPerson
+        camPosFirstPerson = configTable.camPosFirstPerson or camPosFirstPerson
+        if configTable.thirdPerson then
+            thirdPerson = configTable.thirdPerson == 1
+        end
+        defaultFOV = configTable.defaultFOV or defaultFOV
+        zoomFOV = configTable.zoomFOV or zoomFOV
+
+        if configTable.enableHUD then
+            enableHUD = configTable.enableHUD == 1
+        end
+        if configTable.enableHUDFirstPerson then
+            enableHUDFirstPerson = configTable.enableHUDFirstPerson == 1
+        end
+        if configTable.circleHUD then
+            circleHUD = configTable.circleHUD == 1
+        end
+        outerHUDColor = configTable.outerHUDColor or outerHUDColor
+        innerHUDColor = configTable.innerHUDColor or innerHUDColor
+
+        -- print("Client received config (" .. table.count(configTable) .. " values)")
+    end)
+
+    if player() == owner() then
         local font = render.createFont("Trebuchet24", 24, nil, false, nil, nil, true)
 
         hook.add("drawHud", "hud", function()
             if not isValid(base) then return end
+            if not showAxes then return end
 
             local basePos = base:getPos()
             local fwd = base:localToWorld(fwdAxis * 50)
