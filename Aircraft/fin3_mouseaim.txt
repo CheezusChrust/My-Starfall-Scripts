@@ -1,4 +1,4 @@
---@name Fin3 Mouse Aim v2.1.0
+--@name Fin3 Mouse Aim v2.1.1
 --@author Cheezus
 --@shared
 --@include lib/pid3.txt
@@ -156,7 +156,7 @@ if SERVER then
         if name == "config" and table.count(wire.ports.Config) > 0 and configUpdateReady then
             updateConfig()
             sendConfig()
-            
+
             print(Color(255, 255, 255), "Mouse aim config updated!")
         end
     end)
@@ -380,7 +380,7 @@ else
             net.writeFloat(aimVector.x)
             net.writeFloat(aimVector.y)
             net.writeFloat(aimVector.z)
-            net.send()
+            net.send(nil, true)
 
             lastAimVector = aimVector
         end
@@ -410,7 +410,7 @@ else
 
         local aimPos = trace.line(camPos, camPos + aimVector * 100000, nil, MASK.SOLID_BRUSHONLY).HitPos
 
-        aimVector = (aimPos - basePos):getNormalized() -- Correct for cam height offset
+        aimVector = (aimPos - basePos):getNormalized() -- Correct for cam height offset by using basePos instead of camPos
 
         return {
             origin = camPos,
