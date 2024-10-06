@@ -1,4 +1,4 @@
---@name Fin3 Mouse Aim v2.1.2
+--@name Fin3 Mouse Aim v2.1.3
 --@author Cheezus
 --@shared
 --@include lib/pid3.txt
@@ -242,6 +242,7 @@ else
     local upAxis = Vector(0, 0, 1)
 
     local camHeightThirdPerson = 150
+    local camOffsetPos = Vector(0, 0, camHeightThirdPerson)
     local camDistThirdPerson = 600
     local camPosFirstPerson = Vector(130, 2, 49)
     local thirdPerson = true
@@ -291,6 +292,7 @@ else
         upAxis = configTable.upAxis or upAxis
 
         camHeightThirdPerson = configTable.camHeightThirdPerson or camHeightThirdPerson
+        camOffsetPos = Vector(0, 0, camHeightThirdPerson)
         camDistThirdPerson = configTable.camDistThirdPerson or camDistThirdPerson
         camPosFirstPerson = configTable.camPosFirstPerson or camPosFirstPerson
         if configTable.thirdPerson then
@@ -364,7 +366,6 @@ else
     end)
 
     local camHull = Vector(4)
-    local camOffsetPos = Vector(0, 0, camHeightThirdPerson)
     local aimVector = Vector()
     local lastAimVector = Vector()
 
