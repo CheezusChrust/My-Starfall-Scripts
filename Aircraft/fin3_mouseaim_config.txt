@@ -11,7 +11,7 @@ config.upAxis = Vector(0, 0, 1) -- The UP facing direction of your aircraft
 -- Camera settings
 config.camHeightThirdPerson = 150 -- The height of the camera above the aircraft when in third person
 config.camDistThirdPerson = 600 -- The distance of the camera from the aircraft when in third person
-config.camPosFirstPerson = Vector(-72, 0, 28) -- The position of the camera relative to the aircraft when in first person
+config.camPosFirstPersonOverride = nil -- Overrides the automatic first person cam position if necessary
 config.thirdPerson = 1 -- 1 to start in thirdPerson, 0 for firstperson
 config.defaultFOV = 90 -- FOV when not zoomed in
 config.zoomFOV = 40 -- FOV when zoomed in
@@ -32,7 +32,7 @@ With regards to PID tuning:
 - Ki is the integral gain, which generally you won't need to touch.
 - KiMax is the maximum integral value, and again, you generally won't need to touch this.
 - Kd is the derivative gain, which stops the aircraft from oscillating around your aim direction. This can be thought of as damping.
-    - A good value to start at is around 20 for each axis.
+    - A good value to start at is around 20 for pitch and yaw, and 1 for roll
 
 --]]
 
@@ -55,7 +55,7 @@ config.yawDeflectionRate = 300
 config.rollKp = 2
 config.rollKi = 0
 config.rollKiMax = 0
-config.rollKd = 30
+config.rollKd = 1
 config.rollMaxDeflection = 15
 config.rollDeflectionRate = 300
 config.rollReturn = 0.075 -- Attempts to return the aircraft to level flight when not turning - start at around 0.1

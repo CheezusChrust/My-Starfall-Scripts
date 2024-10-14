@@ -1,4 +1,4 @@
---@name Fin3 Mouse Aim v3.3.0
+--@name Fin3 Mouse Aim v3.4.0
 --@author Cheezus
 --@shared
 --@include lib/pid4.txt
@@ -274,6 +274,21 @@ if SERVER then
         wire.ports.Throttle = round(throttle)
     end)
 else
+    local traceLine, traceHull = trace.line, trace.hull
+    local netStart, netSend = net.start, net.send
+    local netWriteFloat = net.writeFloat
+    local netReadEntity, netReadUInt, netReadData = net.readEntity, net.readUInt, net.readData
+    local renderSetColor, renderSetFont, renderPushViewMatrix, renderPopViewMatrix = render.setColor, render.setFont, render.pushViewMatrix, render.popViewMatrix
+    local renderDraw3DLine, renderDrawCircle, renderDrawRectFast, renderDrawSimpleText = render.draw3DLine, render.drawCircle, render.drawRectFast, render.drawSimpleText
+
+    local centerX, centerY = render.getGameResolution()
+    centerX = centerX / 2
+    centerY = centerY / 2
+
+    local color_black = Color(0, 0, 0)
+    local color_red = Color(255, 0, 0)
+    local color_green = Color(0, 255, 0)
+
     -- Default config options
     local showAxes = false
     local fwdAxis = Vector(1, 0, 0)
@@ -282,7 +297,8 @@ else
     local camHeightThirdPerson = 150
     local camOffsetPos = Vector(0, 0, camHeightThirdPerson)
     local camDistThirdPerson = 600
-    local camPosFirstPerson = Vector(130, 2, 49)
+    local camPosFirstPersonOverride
+    local camPosFirstPerson = Vector()
     local thirdPerson = true
     local defaultFOV = 90
     local zoomFOV = 40
@@ -293,29 +309,47 @@ else
     local outerHUDColor = Color(255, 255, 180)
     local innerHUDColor = Color(255, 255, 180)
 
+    local seatViewPositions = {
+        ["models/lubprops/seat/raceseat2.mdl"] = Vector(0, 6.45, 34.4),
+        ["models/lubprops/seat/raceseat.mdl"] = Vector(0, 6.45, 34.4),
+        ["models/nova/jeep_seat.mdl"] = Vector(0, 2, 37.223),
+        ["models/nova/jalopy_seat.mdl"] = Vector(0, 5, 40.172),
+        ["models/props_phx/carseat2.mdl"] = Vector(-0.915, -5.323, 27.314),
+        ["models/nova/chair_office02.mdl"] = Vector(0, 4, 48.5),
+        ["models/nova/airboat_seat.mdl"] = Vector(0, 0, 33.182),
+        ["models/vehicles/driver_pod.mdl"] = Vector(-6.061, 0.005, 69.754),
+        ["models/vehicles/pilot_seat.mdl"] = Vector(-0.005, -1.998, 36)
+    }
+
     local base, seat
 
     timer.create("requestEnts", 1, 0, function()
-        net.start("requestEnts")
-        net.send()
+        netStart("requestEnts")
+        netSend()
     end)
 
     timer.create("requestConfig", 1, 0, function()
-        net.start("requestConfig")
-        net.send()
+        netStart("requestConfig")
+        netSend()
     end)
 
     net.receive("sendEnts", function()
         timer.stop("requestEnts")
-        base = net.readEntity()
-        seat = net.readEntity()
+        base = netReadEntity()
+        seat = netReadEntity()
+
+        local seatCamPos = seatViewPositions[seat:getModel()]
+
+        if seatCamPos then
+            camPosFirstPerson = base:worldToLocal(seat:localToWorld(seatCamPos))
+        end
     end)
 
     net.receive("sendConfig", function()
         timer.stop("requestConfig")
 
-        local len = net.readUInt(16)
-        local configData = bit.decompress(net.readData(len))
+        local len = netReadUInt(16)
+        local configData = bit.decompress(netReadData(len))
         local configTable = von.deserialize(configData)
 
         if configTable.showAxes ~= nil then
@@ -332,7 +366,7 @@ else
         camHeightThirdPerson = configTable.camHeightThirdPerson or camHeightThirdPerson
         camOffsetPos = Vector(0, 0, camHeightThirdPerson)
         camDistThirdPerson = configTable.camDistThirdPerson or camDistThirdPerson
-        camPosFirstPerson = configTable.camPosFirstPerson or camPosFirstPerson
+        camPosFirstPersonOverride = configTable.camPosFirstPersonOverride
         if configTable.thirdPerson then
             thirdPerson = configTable.thirdPerson == 1
         end
@@ -364,31 +398,30 @@ else
             local basePos = base:getPos()
             local fwd = base:localToWorld(fwdAxis * 50)
             local up = base:localToWorld(upAxis * 50)
-            local alpha = math.max(300 - owner():getPos():getDistanceSqr(basePos) / 1000, 0)
 
-            if alpha > 0 then
-                render.pushViewMatrix({
+            if owner():getPos():getDistanceSqr(basePos) < 1000000 then
+                renderPushViewMatrix({
                     type = "3D"
                 })
 
-                render.setColor(Color(255, 0, 0))
-                render.draw3DLine(basePos, fwd)
+                renderSetColor(color_red)
+                renderDraw3DLine(basePos, fwd)
 
-                render.setColor(Color(0, 255, 0))
-                render.draw3DLine(basePos, up)
+                renderSetColor(color_green)
+                renderDraw3DLine(basePos, up)
 
-                render.popViewMatrix()
+                renderPopViewMatrix()
 
                 local fwdScr = fwd:toScreen()
                 local upScr = up:toScreen()
 
-                render.setFont(font)
+                renderSetFont(font)
 
-                render.setColor(Color(255, 0, 0, alpha))
-                render.drawSimpleText(fwdScr.x, fwdScr.y, "Forward", 1, 1)
+                renderSetColor(color_red)
+                renderDrawSimpleText(fwdScr.x, fwdScr.y, "Forward", 1, 1)
 
-                render.setColor(Color(0, 255, 0, alpha))
-                render.drawSimpleText(upScr.x, upScr.y, "Up", 1, 1)
+                renderSetColor(color_green)
+                renderDrawSimpleText(upScr.x, upScr.y, "Up", 1, 1)
             end
         end)
     end
@@ -412,11 +445,11 @@ else
         if player():getVehicle() ~= seat then return end
 
         if aimVector ~= lastAimVector then
-            net.start("mouseaim_aimvector")
-            net.writeFloat(aimVector.x)
-            net.writeFloat(aimVector.y)
-            net.writeFloat(aimVector.z)
-            net.send(nil, true)
+            netStart("mouseaim_aimvector")
+            netWriteFloat(aimVector.x)
+            netWriteFloat(aimVector.y)
+            netWriteFloat(aimVector.z)
+            netSend(nil, true)
 
             lastAimVector = aimVector
         end
@@ -435,16 +468,16 @@ else
             local camCenter = basePos + camOffsetPos
             camPos = camCenter - aimVector * camDistThirdPerson
 
-            local camHitWorldTrace = trace.hull(camCenter, camPos, -camHull, camHull, nil, MASK.SOLID_BRUSHONLY)
+            local camHitWorldTrace = traceHull(camCenter, camPos, -camHull, camHull, nil, MASK.SOLID_BRUSHONLY)
 
             if camHitWorldTrace.Hit then
                 camPos = camHitWorldTrace.HitPos
             end
         else
-            camPos = base:localToWorld(camPosFirstPerson)
+            camPos = base:localToWorld(camPosFirstPersonOverride or camPosFirstPerson)
         end
 
-        local aimPos = trace.line(camPos, camPos + aimVector * 100000, nil, MASK.SOLID_BRUSHONLY).HitPos
+        local aimPos = traceLine(camPos, camPos + aimVector * 100000, nil, MASK.SOLID_BRUSHONLY).HitPos
 
         aimVector = (aimPos - basePos):getNormalized() -- Correct for cam height offset by using basePos instead of camPos
 
@@ -455,12 +488,6 @@ else
             angles = curAng
         }
     end)
-
-    local centerX, centerY = render.getGameResolution()
-    centerX = centerX / 2
-    centerY = centerY / 2
-
-    local color_black = Color(0, 0, 0)
 
     -- For some reason the regular function here requires a valid physobj
     local ENTITY = getMethods("Entity")
@@ -475,28 +502,28 @@ else
         if not thirdPerson and not enableHUDFirstPerson then return end
         local basePos = base:getPos()
 
-        render.setColor(outerHUDColor)
-        render.drawCircle(centerX, centerY, 22)
+        renderSetColor(outerHUDColor)
+        renderDrawCircle(centerX, centerY, 22)
 
-        local aimPos = trace.line(basePos, basePos + base:localToWorldVector(fwdAxis) * 100000, nil, MASK.SOLID_BRUSHONLY).HitPos:toScreen()
+        local aimPos = traceLine(basePos, basePos + base:localToWorldVector(fwdAxis) * 100000, nil, MASK.SOLID_BRUSHONLY).HitPos:toScreen()
         local aimX = aimPos.x
         local aimY = aimPos.y
 
-        render.setColor(innerHUDColor)
+        renderSetColor(innerHUDColor)
         if circleHUD then
-            render.drawCircle(aimX, aimY, 8)
-            render.drawCircle(aimX, aimY, 1)
+            renderDrawCircle(aimX, aimY, 8)
+            renderDrawCircle(aimX, aimY, 1)
         else
-            render.drawRectFast(aimX - 2, aimY - 20, 4, 16)
-            render.drawRectFast(aimX - 2, aimY + 4, 4, 16)
-            render.drawRectFast(aimX - 20, aimY - 2, 16, 4)
-            render.drawRectFast(aimX + 4, aimY - 2, 16, 4)
+            renderDrawRectFast(aimX - 2, aimY - 20, 4, 16)
+            renderDrawRectFast(aimX - 2, aimY + 4, 4, 16)
+            renderDrawRectFast(aimX - 20, aimY - 2, 16, 4)
+            renderDrawRectFast(aimX + 4, aimY - 2, 16, 4)
 
-            render.setColor(color_black)
-            render.drawRectOutline(aimX - 2, aimY - 20, 4, 16)
-            render.drawRectOutline(aimX - 2, aimY + 4, 4, 16)
-            render.drawRectOutline(aimX - 20, aimY - 2, 16, 4)
-            render.drawRectOutline(aimX + 4, aimY - 2, 16, 4)
+            renderSetColor(color_black)
+            renderDrawRectOutline(aimX - 2, aimY - 20, 4, 16)
+            renderDrawRectOutline(aimX - 2, aimY + 4, 4, 16)
+            renderDrawRectOutline(aimX - 20, aimY - 2, 16, 4)
+            renderDrawRectOutline(aimX + 4, aimY - 2, 16, 4)
         end
     end)
 end
