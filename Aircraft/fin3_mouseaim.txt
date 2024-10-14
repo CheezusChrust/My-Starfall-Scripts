@@ -1,7 +1,7 @@
---@name Fin3 Mouse Aim v2.1.3
+--@name Fin3 Mouse Aim v3.3.0
 --@author Cheezus
 --@shared
---@include lib/pid3.txt
+--@include lib/pid4.txt
 
 -- DO NOT EDIT ANYTHING IN HERE!
 -- Do all configuration in the config chip and wire this chip to it
@@ -33,6 +33,8 @@ if SERVER then
     local stringLower = string.lower
     local rad2deg, atan2 = (180 / math.pi), math.atan2
     local clamp, sign, abs, approach, max, round = math.clamp, math.sign, math.abs, math.approach, math.max, math.round
+    local cos, acos = math.cos, math.acos
+    local remap, lerp = math.remap, math.lerp
     local inputs = {
         pitchup = 0,
         pitchdown = 0,
@@ -45,14 +47,13 @@ if SERVER then
     }
     local pitchOut, yawOut, rollOut = 0, 0, 0
     local vector_up = Vector(0, 0, 1)
-    local lastRollAngle = 0
     local freelook = false
     local throttle = 0
     local fwdAxis, upAxis, rightAxis, pitchKp, pitchKi, pitchKiMax, pitchKd, pitchMaxDeflection, pitchDeflectionRate
     local yawKp, yawKi, yawKiMax, yawKd, yawMaxDeflection, yawDeflectionRate
     local rollKp, rollKi, rollKiMax, rollKd, rollMaxDeflection, rollDeflectionRate, rollReturn, rollManualRate
     local throttleMax, throttleRate, idealSpeed
-    local pid = require("lib/pid3.txt")
+    local pid = require("lib/pid4.txt")
     local dt = game.getTickInterval()
 
     local function updateConfig()
@@ -90,9 +91,9 @@ if SERVER then
 
         idealSpeed = config.idealSpeed or 300
 
-        pitchPID = pid.new(pitchKp, pitchKi * dt, pitchKiMax / dt, pitchKd)
-        yawPID = pid.new(yawKp, yawKi * dt, yawKiMax / dt, yawKd)
-        rollPID = pid.new(rollKp, rollKi * dt, rollKiMax / dt, rollKd)
+        pitchPID = pid.new(pitchKp, pitchKi * dt, pitchKiMax / dt, pitchKd * dt)
+        yawPID = pid.new(yawKp, yawKi * dt, yawKiMax / dt, yawKd * dt)
+        rollPID = pid.new(rollKp, rollKi * dt, rollKiMax / dt, rollKd * dt)
     end
 
     local function sendConfig(ply)
@@ -177,7 +178,7 @@ if SERVER then
 
     hook.add("tick", "mouseaim_think", function()
         local base, seat = wire.ports.Base, wire.ports.Seat
-        if not isValid(base) or not isValid(seat) or wire.ports.Active == 0 then
+        if not fwdAxis or not isValid(base) or not isValid(seat) or wire.ports.Active == 0 then
             pitchOut = 0
             yawOut = 0
             rollOut = 0
@@ -193,27 +194,63 @@ if SERVER then
         local upAxisWorld = base:localToWorldVector(upAxis)
         local rightAxisWorld = base:localToWorldVector(rightAxis)
 
-        local baseRoll = -atan2(rightAxisWorld:dot(vector_up), upAxisWorld:dot(vector_up)) * rad2deg
-        local rollRate = baseRoll - lastRollAngle
-        lastRollAngle = baseRoll
+        local baseRollRads = -atan2(rightAxisWorld:dot(vector_up), upAxisWorld:dot(vector_up))
+        local baseRoll = baseRollRads * rad2deg
 
-        if rollRate > 180 then rollRate = rollRate - 360 end
-        if rollRate < -180 then rollRate = rollRate + 360 end
-
-        rollRate = rollRate / dt
+        local angVel = base:getAngleVelocity()
+        local pitchRate = angVel:dot(rightAxis)
+        local yawRate = angVel:dot(upAxis)
+        local rollRate = angVel:dot(fwdAxis)
 
         local baseVelKmh = base:getVelocity():getLength() / 10.9361
         local effectivenessRatio = clamp((baseVelKmh / idealSpeed) ^ 2, 0.5, 5)
 
         local elevation = projectGetAngle(aimVector, rightAxisWorld, upAxisWorld, fwdAxisWorld)
-        local heading = projectGetAngle(aimVector, upAxisWorld, rightAxisWorld, fwdAxisWorld)
 
-        -- Try to return the aircraft to level flight
+        local heading
+        if fwdAxisWorld:dot(aimVector) > 0 then
+            heading = projectGetAngle(aimVector, upAxisWorld, rightAxisWorld, fwdAxisWorld)
+        else
+            heading = projectGetAngle(aimVector, upAxisWorld, rightAxisWorld, -fwdAxisWorld)
+        end
+
+        local aimVectorLeft = aimVector:rotateAroundAxis(vector_up, 90)
+        aimVectorLeft.z = 0
+        local aimVectorLeft = aimVectorLeft:getNormalized()
+        local aimVectorUp = aimVector:cross(aimVectorLeft)
+        local elevationAboveCamPlane = acos(fwdAxisWorld:dot(aimVectorUp)) * rad2deg - 90
+
+        local elevation2 = elevationAboveCamPlane * abs(cos(baseRollRads))
+        if abs(baseRoll) > 90 then elevation2 = -elevation2 end
+        local heading2 = -elevationAboveCamPlane * sign(baseRoll)
+
+        local rollCorrectionFactor = abs(baseRoll / 90)
+        if rollCorrectionFactor > 1 then rollCorrectionFactor = 1 - (rollCorrectionFactor - 1) end
+
+        local correctedHeading = lerp(rollCorrectionFactor^0.5, heading, heading2)
+
+        yawPID:update(0, correctedHeading, nil, -yawRate)
+
+        -- Avoid roll inputs if the aim vector is close to alignment with the plane's forward vector
+        local rollCenterFactor = clamp(remap(acos(aimVector:dot(fwdAxisWorld)) * rad2deg, 0, 90, 0, 1), 0, 1)
+        local rollTarget
+        if aimVector:dot(upAxisWorld) > 0 then
+            rollTarget = projectGetAngle(aimVector, fwdAxisWorld, rightAxisWorld, upAxisWorld)
+        else
+            rollTarget = projectGetAngle(aimVector, fwdAxisWorld, rightAxisWorld, -upAxisWorld)
+        end
+
+        -- Try to return the aircraft to level flight - borrowed from Gaghr's mouse aim
         local unroll = sign(baseRoll) * (abs(clamp(baseRoll, -45, 45)) ^ 0.9) * -rollReturn
 
-        pitchPID:update(0, elevation, true)
-        yawPID:update(0, heading, true)
-        rollPID:update(0, heading + unroll, true)
+        rollPID:update(0, rollTarget * rollCenterFactor, nil, rollRate)
+
+        -- Determine how much the elevation of the aim vector lies on the vertical plane of the aircraft
+        local elevationCorrectionFactor = 1 - abs(aimVector:dot(rightAxisWorld))
+        elevationCorrectionFactor = elevationCorrectionFactor^2
+        local correctedElevation = lerp(elevationCorrectionFactor, elevation2, elevation)
+
+        pitchPID:update(0, correctedElevation, nil, pitchRate)
 
         local manPitch = (inputs.pitchdown - inputs.pitchup) * pitchMaxDeflection
         local manYaw = (inputs.yawleft - inputs.yawright) * yawMaxDeflection
@@ -221,13 +258,14 @@ if SERVER then
 
         local inPitch = manPitch ~= 0 and manPitch or (pitchPID:getValue() / effectivenessRatio)
         local inYaw = manYaw ~= 0 and manYaw or (yawPID:getValue() / effectivenessRatio)
-        local rollMul = max(abs(-sign(manRoll) * rollManualRate - rollRate) / rollManualRate, 0)
-        local inRoll = manRoll ~= 0 and (manRoll * rollMul) or (rollPID:getValue() / effectivenessRatio)
+
+        -- Limit manual roll to the specified maximum roll rate
+        local manRollMul = max(abs(-sign(manRoll) * rollManualRate - rollRate) / rollManualRate, 0)
+        local inRoll = manRoll ~= 0 and (manRoll * manRollMul) or (rollPID:getValue() / effectivenessRatio - unroll)
 
         pitchOut = approach(pitchOut, clamp(inPitch, -pitchMaxDeflection, pitchMaxDeflection), pitchDeflectionRate * dt)
         yawOut = approach(yawOut, clamp(inYaw, -yawMaxDeflection, yawMaxDeflection), yawDeflectionRate * dt)
         rollOut = approach(rollOut, clamp(inRoll, -rollMaxDeflection, rollMaxDeflection), rollDeflectionRate * dt)
-
         throttle = clamp(throttle + (inputs.increasethrottle - inputs.decreasethrottle) * throttleRate * dt, 0, throttleMax)
 
         wire.ports.Pitch = pitchOut

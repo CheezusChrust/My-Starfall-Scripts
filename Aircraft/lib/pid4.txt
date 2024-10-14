@@ -1,0 +1,52 @@
+--@name lib/pid4
+
+local clamp = math.clamp
+local PIDClass = {}
+
+function PIDClass.new(kp, ki, kiClamp, kd)
+    local pid = {}
+    
+    setmetatable(pid, {__index = PIDClass})
+    
+    pid.error = 0
+    pid.kp = kp
+    pid.ki = ki
+    pid.kiClamp = kiClamp or math.huge
+    pid.kd = kd
+    pid.p = 0
+    pid.i = 0
+    pid.d = 0
+    pid.out = 0
+    pid.errorPrev = 0
+    
+    return pid
+end
+
+function PIDClass:update(target, current, useCurrentForDTerm, dOverride)
+    self.error = target - current
+
+    self.p = self.error
+    self.i = self.i + self.error
+
+    if istable(self.kiClamp) then
+        self.i = clamp(self.i, self.kiClamp[1], self.kiClamp[2])
+    else
+        self.i = clamp(self.i, -self.kiClamp, self.kiClamp)
+    end
+
+    if dOverride then
+        self.d = dOverride
+    else
+        local newError = useCurrentForDTerm and -current or self.error
+        self.d = newError - self.errorPrev
+        self.errorPrev = newError
+    end
+
+    self.out = (self.p * self.kp) + (self.i * self.ki) + (self.d * self.kd)
+end
+
+function PIDClass:getValue()
+    return self.out
+end
+
+return PIDClass
