@@ -1,4 +1,4 @@
---@name Fin3 Mouse Aim v3.4.0
+--@name Fin3 Mouse Aim v3.4.2
 --@author Cheezus
 --@shared
 --@include lib/pid4.txt
@@ -260,7 +260,7 @@ if SERVER then
         local inYaw = manYaw ~= 0 and manYaw or (yawPID:getValue() / effectivenessRatio)
 
         -- Limit manual roll to the specified maximum roll rate
-        local manRollMul = max(abs(-sign(manRoll) * rollManualRate - rollRate) / rollManualRate, 0)
+        local manRollMul = max(abs(-sign(manRoll) * rollManualRate - rollRate) / rollManualRate, 0) ^ 0.5
         local inRoll = manRoll ~= 0 and (manRoll * manRollMul) or (rollPID:getValue() / effectivenessRatio - unroll)
 
         pitchOut = approach(pitchOut, clamp(inPitch, -pitchMaxDeflection, pitchMaxDeflection), pitchDeflectionRate * dt)
@@ -444,7 +444,7 @@ else
         if not isValid(base) or not isValid(seat) then return end
         if player():getVehicle() ~= seat then return end
 
-        if aimVector ~= lastAimVector then
+        if aimVector ~= lastAimVector and net.getBytesLeft() > 16 then
             netStart("mouseaim_aimvector")
             netWriteFloat(aimVector.x)
             netWriteFloat(aimVector.y)
