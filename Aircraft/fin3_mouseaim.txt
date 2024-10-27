@@ -1,4 +1,4 @@
---@name Fin3 Mouse Aim v3.4.2
+--@name Fin3 Mouse Aim v3.4.3
 --@author Cheezus
 --@shared
 --@include lib/pid4.txt
@@ -27,7 +27,8 @@ if SERVER then
         Pitch = "number",
         Yaw = "number",
         Roll = "number",
-        Throttle = "number"
+        Throttle = "number",
+        Heading = "number"
     })
 
     local stringLower = string.lower
@@ -186,6 +187,7 @@ if SERVER then
             wire.ports.Pitch = 0
             wire.ports.Yaw = 0
             wire.ports.Roll = 0
+            wire.ports.Heading = 0
 
             return
         end
@@ -213,6 +215,8 @@ if SERVER then
         else
             heading = projectGetAngle(aimVector, upAxisWorld, rightAxisWorld, -fwdAxisWorld)
         end
+
+        wire.ports.Heading = heading
 
         local aimVectorLeft = aimVector:rotateAroundAxis(vector_up, 90)
         aimVectorLeft.z = 0
@@ -334,9 +338,12 @@ else
     end)
 
     net.receive("sendEnts", function()
-        timer.stop("requestEnts")
         base = netReadEntity()
         seat = netReadEntity()
+
+        if not isValid(base) or not isValid(seat) then return end
+
+        timer.stop("requestEnts")
 
         local seatCamPos = seatViewPositions[seat:getModel()]
 
