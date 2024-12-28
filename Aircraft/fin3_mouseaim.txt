@@ -1,4 +1,4 @@
---@name Fin3 Mouse Aim v3.4.3
+--@name Fin3 Mouse Aim v3.5.0
 --@author Cheezus
 --@shared
 --@include lib/pid4.txt
@@ -28,7 +28,9 @@ if SERVER then
         Yaw = "number",
         Roll = "number",
         Throttle = "number",
-        Heading = "number"
+        Heading = "number",
+        CamPos = "vector",
+        AimVector = "vector"
     })
 
     local stringLower = string.lower
@@ -47,7 +49,7 @@ if SERVER then
         decreasethrottle = 0
     }
     local pitchOut, yawOut, rollOut = 0, 0, 0
-    local vector_up = Vector(0, 0, 1)
+    local vector_up, vector_origin = Vector(0, 0, 1), Vector()
     local freelook = false
     local throttle = 0
     local fwdAxis, upAxis, rightAxis, pitchKp, pitchKi, pitchKiMax, pitchKd, pitchMaxDeflection, pitchDeflectionRate
@@ -170,11 +172,12 @@ if SERVER then
         return atan2(xComponent, yComponent) * rad2deg
     end
 
-    local aimVector = Vector()
+    local aimVectorLive = vector_origin
+    local aimVector = vector_origin
+    local camPos = vector_origin
     net.receive("mouseaim_aimvector", function()
-        if not freelook then
-            aimVector = Vector(net.readFloat(), net.readFloat(), net.readFloat())
-        end
+        aimVectorLive = Vector(net.readFloat(), net.readFloat(), net.readFloat())
+        camPos = Vector(net.readFloat(), net.readFloat(), net.readFloat())
     end)
 
     hook.add("tick", "mouseaim_think", function()
@@ -188,6 +191,8 @@ if SERVER then
             wire.ports.Yaw = 0
             wire.ports.Roll = 0
             wire.ports.Heading = 0
+            wire.ports.CamPos = vector_origin
+            wire.ports.AimVector = vector_origin
 
             return
         end
@@ -195,6 +200,16 @@ if SERVER then
         local fwdAxisWorld = base:localToWorldVector(fwdAxis)
         local upAxisWorld = base:localToWorldVector(upAxis)
         local rightAxisWorld = base:localToWorldVector(rightAxis)
+
+        local manPitch = (inputs.pitchdown - inputs.pitchup) * pitchMaxDeflection
+        local manYaw = (inputs.yawleft - inputs.yawright) * yawMaxDeflection
+        local manRoll = (inputs.rollleft - inputs.rollright) * rollMaxDeflection
+
+        if not freelook then
+            aimVector = aimVectorLive
+        elseif manPitch ~= 0 or manYaw ~= 0 or manRoll ~= 0 then
+            aimVector = fwdAxisWorld
+        end
 
         local baseRollRads = -atan2(rightAxisWorld:dot(vector_up), upAxisWorld:dot(vector_up))
         local baseRoll = baseRollRads * rad2deg
@@ -256,16 +271,12 @@ if SERVER then
 
         pitchPID:update(0, correctedElevation, nil, pitchRate)
 
-        local manPitch = (inputs.pitchdown - inputs.pitchup) * pitchMaxDeflection
-        local manYaw = (inputs.yawleft - inputs.yawright) * yawMaxDeflection
-        local manRoll = (inputs.rollleft - inputs.rollright) * rollMaxDeflection
-
         local inPitch = manPitch ~= 0 and manPitch or (pitchPID:getValue() / effectivenessRatio)
         local inYaw = manYaw ~= 0 and manYaw or (yawPID:getValue() / effectivenessRatio)
 
         -- Limit manual roll to the specified maximum roll rate
         local manRollMul = max(abs(-sign(manRoll) * rollManualRate - rollRate) / rollManualRate, 0) ^ 0.5
-        local inRoll = manRoll ~= 0 and (manRoll * manRollMul) or (rollPID:getValue() / effectivenessRatio - unroll)
+        local inRoll = (manPitch ~= 0 or manRoll ~= 0) and (manRoll * manRollMul) or (rollPID:getValue() / effectivenessRatio - unroll)
 
         pitchOut = approach(pitchOut, clamp(inPitch, -pitchMaxDeflection, pitchMaxDeflection), pitchDeflectionRate * dt)
         yawOut = approach(yawOut, clamp(inYaw, -yawMaxDeflection, yawMaxDeflection), yawDeflectionRate * dt)
@@ -276,6 +287,8 @@ if SERVER then
         wire.ports.Yaw = yawOut
         wire.ports.Roll = rollOut
         wire.ports.Throttle = round(throttle)
+        wire.ports.CamPos = camPos
+        wire.ports.AimVector = aimVector
     end)
 else
     local traceLine, traceHull = trace.line, trace.hull
@@ -445,20 +458,26 @@ else
 
     local camHull = Vector(4)
     local aimVector = Vector()
+    local camPos = Vector()
     local lastAimVector = Vector()
+    local lastCamPos = Vector()
 
     hook.add("tick", "mouseaim_aimvector", function()
         if not isValid(base) or not isValid(seat) then return end
         if player():getVehicle() ~= seat then return end
 
-        if aimVector ~= lastAimVector and net.getBytesLeft() > 16 then
+        if (aimVector ~= lastAimVector or camPos ~= lastCamPos) and net.getBytesLeft() > 16 then
             netStart("mouseaim_aimvector")
             netWriteFloat(aimVector.x)
             netWriteFloat(aimVector.y)
             netWriteFloat(aimVector.z)
+            netWriteFloat(camPos.x)
+            netWriteFloat(camPos.y)
+            netWriteFloat(camPos.z)
             netSend(nil, true)
 
             lastAimVector = aimVector
+            lastCamPos = camPos
         end
     end)
 
@@ -469,7 +488,6 @@ else
         local basePos = base:getPos()
         local curAng = player():getEyeAngles()
         aimVector = curAng:getForward()
-        local camPos
 
         if thirdPerson then
             local camCenter = basePos + camOffsetPos
